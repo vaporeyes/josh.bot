@@ -264,3 +264,157 @@ func TestDeleteProjectHandler(t *testing.T) {
 		t.Errorf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
+
+func TestLinksHandler(t *testing.T) {
+	mockService := mock.NewBotService()
+	adapter := NewAdapter(mockService)
+
+	req, err := http.NewRequest("GET", "/v1/links", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(adapter.LinksHandler)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+
+	var links []domain.Link
+	if err := json.Unmarshal(rr.Body.Bytes(), &links); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if len(links) < 2 {
+		t.Errorf("expected at least 2 links, got %d", len(links))
+	}
+}
+
+func TestLinksHandler_FilterByTag(t *testing.T) {
+	mockService := mock.NewBotService()
+	adapter := NewAdapter(mockService)
+
+	req, err := http.NewRequest("GET", "/v1/links?tag=aws", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(adapter.LinksHandler)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+
+	var links []domain.Link
+	if err := json.Unmarshal(rr.Body.Bytes(), &links); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if len(links) != 1 {
+		t.Errorf("expected 1 link with tag 'aws', got %d", len(links))
+	}
+}
+
+func TestCreateLinkHandler(t *testing.T) {
+	mockService := mock.NewBotService()
+	adapter := NewAdapter(mockService)
+
+	body := strings.NewReader(`{"url":"https://example.com","title":"Example","tags":["test"]}`)
+	req, err := http.NewRequest("POST", "/v1/links", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(adapter.CreateLinkHandler)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Errorf("expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestLinkHandler(t *testing.T) {
+	mockService := mock.NewBotService()
+	adapter := NewAdapter(mockService)
+
+	req, err := http.NewRequest("GET", "/v1/links/a1b2c3d4e5f6", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(adapter.LinkHandler)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var link domain.Link
+	if err := json.Unmarshal(rr.Body.Bytes(), &link); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if link.Title != "The Go Blog" {
+		t.Errorf("expected title 'The Go Blog', got '%s'", link.Title)
+	}
+}
+
+func TestLinkHandler_NotFound(t *testing.T) {
+	mockService := mock.NewBotService()
+	adapter := NewAdapter(mockService)
+
+	req, err := http.NewRequest("GET", "/v1/links/nonexistent", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(adapter.LinkHandler)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestUpdateLinkHandler(t *testing.T) {
+	mockService := mock.NewBotService()
+	adapter := NewAdapter(mockService)
+
+	body := strings.NewReader(`{"title":"Updated Title"}`)
+	req, err := http.NewRequest("PUT", "/v1/links/a1b2c3d4e5f6", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(adapter.UpdateLinkHandler)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestDeleteLinkHandler(t *testing.T) {
+	mockService := mock.NewBotService()
+	adapter := NewAdapter(mockService)
+
+	req, err := http.NewRequest("DELETE", "/v1/links/a1b2c3d4e5f6", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(adapter.DeleteLinkHandler)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+}

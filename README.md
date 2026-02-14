@@ -1,7 +1,5 @@
 # josh.bot
 
-[![built by Gemini](https://img.shields.io/badge/built_by-Gemini-blue.svg)](https://gemini.google.com)
-
 A personal API-first platform for Josh, accessible at [josh.bot](https://josh.bot). This project serves as a dynamic, cloud-native backend that provides real-time status and information.
 
 ## Architecture

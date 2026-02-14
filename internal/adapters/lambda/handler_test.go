@@ -353,6 +353,152 @@ func TestRouter_DeleteProject_Success(t *testing.T) {
 	}
 }
 
+func TestRouter_GetLinks_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "GET",
+		Path:       "/v1/links",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Body, "The Go Blog") {
+		t.Errorf("unexpected body: %v", resp.Body)
+	}
+}
+
+func TestRouter_GetLinks_FilterByTag(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod:            "GET",
+		Path:                  "/v1/links",
+		Headers:               map[string]string{"x-api-key": "key"},
+		QueryStringParameters: map[string]string{"tag": "aws"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Body, "DynamoDB") {
+		t.Errorf("expected DynamoDB link in filtered results: %v", resp.Body)
+	}
+	if strings.Contains(resp.Body, "Go Blog") {
+		t.Errorf("expected Go Blog to be filtered out: %v", resp.Body)
+	}
+}
+
+func TestRouter_PostLink_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/links",
+		Headers:    map[string]string{"x-api-key": "key"},
+		Body:       `{"url":"https://example.com","title":"Example","tags":["test"]}`,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 201 {
+		t.Errorf("expected 201, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestRouter_PostLink_InvalidJSON(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/links",
+		Headers:    map[string]string{"x-api-key": "key"},
+		Body:       `{bad json`,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 400 {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestRouter_GetLink_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "GET",
+		Path:       "/v1/links/a1b2c3d4e5f6",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestRouter_PutLink_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "PUT",
+		Path:       "/v1/links/a1b2c3d4e5f6",
+		Headers:    map[string]string{"x-api-key": "key"},
+		Body:       `{"title":"Updated Title"}`,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestRouter_DeleteLink_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "DELETE",
+		Path:       "/v1/links/a1b2c3d4e5f6",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
 func TestRouter_NotFound(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 

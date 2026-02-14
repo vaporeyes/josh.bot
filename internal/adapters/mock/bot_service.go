@@ -72,3 +72,50 @@ func (s *BotService) UpdateProject(slug string, fields map[string]any) error {
 func (s *BotService) DeleteProject(slug string) error {
 	return nil
 }
+
+// GetLinks returns hardcoded links, optionally filtered by tag.
+func (s *BotService) GetLinks(tag string) ([]domain.Link, error) {
+	links := []domain.Link{
+		{ID: "a1b2c3d4e5f6", URL: "https://go.dev/blog/", Title: "The Go Blog", Tags: []string{"go", "programming"}},
+		{ID: "b2c3d4e5f6a1", URL: "https://aws.amazon.com/dynamodb/", Title: "Amazon DynamoDB", Tags: []string{"aws", "dynamodb", "databases"}},
+	}
+	if tag == "" {
+		return links, nil
+	}
+	var filtered []domain.Link
+	for _, l := range links {
+		for _, t := range l.Tags {
+			if t == tag {
+				filtered = append(filtered, l)
+				break
+			}
+		}
+	}
+	return filtered, nil
+}
+
+// GetLink returns a hardcoded link by ID.
+func (s *BotService) GetLink(id string) (domain.Link, error) {
+	links, _ := s.GetLinks("")
+	for _, l := range links {
+		if l.ID == id {
+			return l, nil
+		}
+	}
+	return domain.Link{}, fmt.Errorf("link %q not found", id)
+}
+
+// CreateLink is a no-op in the mock adapter.
+func (s *BotService) CreateLink(link domain.Link) error {
+	return nil
+}
+
+// UpdateLink is a no-op in the mock adapter.
+func (s *BotService) UpdateLink(id string, fields map[string]any) error {
+	return nil
+}
+
+// DeleteLink is a no-op in the mock adapter.
+func (s *BotService) DeleteLink(id string) error {
+	return nil
+}

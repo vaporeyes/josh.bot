@@ -122,6 +122,85 @@ func (a *Adapter) DeleteProjectHandler(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, http.StatusOK)
 }
 
+func (a *Adapter) LinksHandler(w http.ResponseWriter, r *http.Request) {
+	tag := r.URL.Query().Get("tag")
+	links, err := a.service.GetLinks(tag)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, links)
+}
+
+func (a *Adapter) CreateLinkHandler(w http.ResponseWriter, r *http.Request) {
+	var link domain.Link
+	if err := json.NewDecoder(r.Body).Decode(&link); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.CreateLink(link); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusCreated)
+}
+
+// LinkHandler handles GET /v1/links/{id}.
+func (a *Adapter) LinkHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/links/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	link, err := a.service.GetLink(id)
+	if err != nil {
+		http.Error(w, `{"error":"link not found"}`, http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, link)
+}
+
+func (a *Adapter) UpdateLinkHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/links/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var fields map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.UpdateLink(id, fields); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
+func (a *Adapter) DeleteLinkHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/links/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.DeleteLink(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
 // writeJSON encodes val as JSON and writes it to the response.
 func writeJSON(w http.ResponseWriter, statusCode int, val any) {
 	w.Header().Set("Content-Type", "application/json")

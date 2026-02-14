@@ -4,6 +4,7 @@ package dynamodb
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -20,6 +21,7 @@ type mockDynamoDBClient struct {
 	updateInput  *dynamodb.UpdateItemInput
 	scanOutput   *dynamodb.ScanOutput
 	scanErr      error
+	scanInput    *dynamodb.ScanInput
 	putOutput    *dynamodb.PutItemOutput
 	putErr       error
 	putInput     *dynamodb.PutItemInput
@@ -38,6 +40,7 @@ func (m *mockDynamoDBClient) UpdateItem(ctx context.Context, params *dynamodb.Up
 }
 
 func (m *mockDynamoDBClient) Scan(ctx context.Context, params *dynamodb.ScanInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
+	m.scanInput = params
 	return m.scanOutput, m.scanErr
 }
 
@@ -364,6 +367,224 @@ func TestDeleteProject_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
 	err := svc.DeleteProject("test")
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+// --- Link Tests ---
+
+func TestGetLinks_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		scanOutput: &dynamodb.ScanOutput{
+			Items: []map[string]types.AttributeValue{
+				{
+					"id":    &types.AttributeValueMemberS{Value: "link#a1b2c3d4e5f6"},
+					"url":   &types.AttributeValueMemberS{Value: "https://go.dev/blog/"},
+					"title": &types.AttributeValueMemberS{Value: "The Go Blog"},
+					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+						&types.AttributeValueMemberS{Value: "go"},
+						&types.AttributeValueMemberS{Value: "programming"},
+					}},
+				},
+				{
+					"id":    &types.AttributeValueMemberS{Value: "link#b2c3d4e5f6a1"},
+					"url":   &types.AttributeValueMemberS{Value: "https://aws.amazon.com/dynamodb/"},
+					"title": &types.AttributeValueMemberS{Value: "Amazon DynamoDB"},
+					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+						&types.AttributeValueMemberS{Value: "aws"},
+					}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	links, err := svc.GetLinks("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(links) != 2 {
+		t.Fatalf("expected 2 links, got %d", len(links))
+	}
+	if links[0].Title != "The Go Blog" {
+		t.Errorf("expected title 'The Go Blog', got '%s'", links[0].Title)
+	}
+}
+
+func TestGetLinks_FilterByTag(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		scanOutput: &dynamodb.ScanOutput{
+			Items: []map[string]types.AttributeValue{
+				{
+					"id":    &types.AttributeValueMemberS{Value: "link#b2c3d4e5f6a1"},
+					"url":   &types.AttributeValueMemberS{Value: "https://aws.amazon.com/dynamodb/"},
+					"title": &types.AttributeValueMemberS{Value: "Amazon DynamoDB"},
+					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+						&types.AttributeValueMemberS{Value: "aws"},
+					}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	links, err := svc.GetLinks("aws")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+	// Verify the scan input includes a contains filter for tags
+	if mock.scanInput == nil {
+		t.Fatal("expected Scan to be called")
+	}
+	filterExpr := *mock.scanInput.FilterExpression
+	if !strings.Contains(filterExpr, "contains") {
+		t.Errorf("expected filter expression to contain 'contains', got '%s'", filterExpr)
+	}
+}
+
+func TestGetLinks_Empty(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		scanOutput: &dynamodb.ScanOutput{Items: []map[string]types.AttributeValue{}},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	links, err := svc.GetLinks("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(links) != 0 {
+		t.Errorf("expected 0 links, got %d", len(links))
+	}
+}
+
+func TestGetLink_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"id":    &types.AttributeValueMemberS{Value: "link#a1b2c3d4e5f6"},
+				"url":   &types.AttributeValueMemberS{Value: "https://go.dev/blog/"},
+				"title": &types.AttributeValueMemberS{Value: "The Go Blog"},
+				"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+					&types.AttributeValueMemberS{Value: "go"},
+				}},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	link, err := svc.GetLink("a1b2c3d4e5f6")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if link.Title != "The Go Blog" {
+		t.Errorf("expected title 'The Go Blog', got '%s'", link.Title)
+	}
+	if link.URL != "https://go.dev/blog/" {
+		t.Errorf("expected url, got '%s'", link.URL)
+	}
+}
+
+func TestGetLink_NotFound(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{Item: nil},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetLink("nonexistent")
+	if err == nil {
+		t.Error("expected error for missing link, got nil")
+	}
+}
+
+func TestCreateLink_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.CreateLink(domain.Link{
+		URL:   "https://go.dev/blog/",
+		Title: "The Go Blog",
+		Tags:  []string{"go", "programming"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.putInput == nil {
+		t.Fatal("expected PutItem to be called")
+	}
+	// Verify the item has the correct link# prefixed id
+	idAttr, ok := mock.putInput.Item["id"]
+	if !ok {
+		t.Fatal("expected 'id' in put item")
+	}
+	idVal := idAttr.(*types.AttributeValueMemberS).Value
+	expectedID := "link#" + domain.LinkIDFromURL("https://go.dev/blog/")
+	if idVal != expectedID {
+		t.Errorf("expected id '%s', got '%s'", expectedID, idVal)
+	}
+}
+
+func TestCreateLink_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.CreateLink(domain.Link{URL: "https://example.com", Title: "Test"})
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+func TestUpdateLink_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateLink("a1b2c3d4e5f6", map[string]any{
+		"title": "Updated Title",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.updateInput == nil {
+		t.Fatal("expected UpdateItem to be called")
+	}
+	idAttr := mock.updateInput.Key["id"]
+	if idAttr.(*types.AttributeValueMemberS).Value != "link#a1b2c3d4e5f6" {
+		t.Errorf("expected key 'link#a1b2c3d4e5f6', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+}
+
+func TestUpdateLink_InvalidField(t *testing.T) {
+	mock := &mockDynamoDBClient{}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateLink("test", map[string]any{"hacker": "nope"})
+	if err == nil {
+		t.Error("expected error for invalid field, got nil")
+	}
+}
+
+func TestDeleteLink_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.DeleteLink("a1b2c3d4e5f6")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.deleteInput == nil {
+		t.Fatal("expected DeleteItem to be called")
+	}
+	idAttr := mock.deleteInput.Key["id"]
+	if idAttr.(*types.AttributeValueMemberS).Value != "link#a1b2c3d4e5f6" {
+		t.Errorf("expected key 'link#a1b2c3d4e5f6', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+}
+
+func TestDeleteLink_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.DeleteLink("test")
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}

@@ -193,6 +193,122 @@ func (s *BotService) DeleteProject(slug string) error {
 	return nil
 }
 
+// allowedLinkFields defines which link fields can be updated via PUT.
+var allowedLinkFields = map[string]bool{
+	"title": true, "tags": true,
+}
+
+// --- Link Operations ---
+
+// GetLinks fetches all links from DynamoDB, optionally filtered by tag.
+func (s *BotService) GetLinks(tag string) ([]domain.Link, error) {
+	filterExpr := "begins_with(id, :prefix)"
+	exprValues := map[string]types.AttributeValue{
+		":prefix": &types.AttributeValueMemberS{Value: "link#"},
+	}
+
+	if tag != "" {
+		filterExpr += " AND contains(tags, :tag)"
+		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
+	}
+
+	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+		TableName:                 &s.tableName,
+		FilterExpression:          &filterExpr,
+		ExpressionAttributeValues: exprValues,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("dynamodb Scan: %w", err)
+	}
+
+	links := make([]domain.Link, 0, len(output.Items))
+	for _, item := range output.Items {
+		var l domain.Link
+		if err := attributevalue.UnmarshalMap(item, &l); err != nil {
+			return nil, fmt.Errorf("unmarshal link: %w", err)
+		}
+		links = append(links, l)
+	}
+
+	return links, nil
+}
+
+// GetLink fetches a single link by ID from DynamoDB.
+func (s *BotService) GetLink(id string) (domain.Link, error) {
+	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: "link#" + id},
+		},
+	})
+	if err != nil {
+		return domain.Link{}, fmt.Errorf("dynamodb GetItem: %w", err)
+	}
+	if output.Item == nil {
+		return domain.Link{}, fmt.Errorf("link %q not found", id)
+	}
+
+	var link domain.Link
+	if err := attributevalue.UnmarshalMap(output.Item, &link); err != nil {
+		return domain.Link{}, fmt.Errorf("unmarshal link: %w", err)
+	}
+
+	return link, nil
+}
+
+// CreateLink adds a new link to DynamoDB.
+// The ID is generated from the URL hash, providing automatic deduplication.
+func (s *BotService) CreateLink(link domain.Link) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	link.ID = "link#" + domain.LinkIDFromURL(link.URL)
+	link.CreatedAt = now
+	link.UpdatedAt = now
+
+	item, err := attributevalue.MarshalMap(link)
+	if err != nil {
+		return fmt.Errorf("marshal link: %w", err)
+	}
+
+	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+		TableName: &s.tableName,
+		Item:      item,
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb PutItem: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateLink updates specific fields on a link in DynamoDB.
+func (s *BotService) UpdateLink(id string, fields map[string]any) error {
+	if len(fields) == 0 {
+		return fmt.Errorf("no fields provided for update")
+	}
+
+	for key := range fields {
+		if !allowedLinkFields[key] {
+			return fmt.Errorf("field %q is not an updatable link field", key)
+		}
+	}
+
+	return s.updateItem("link#"+id, fields)
+}
+
+// DeleteLink removes a link from DynamoDB.
+func (s *BotService) DeleteLink(id string) error {
+	_, err := s.client.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: "link#" + id},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb DeleteItem: %w", err)
+	}
+	return nil
+}
+
 // --- Shared Helpers ---
 
 // updateItem builds and executes a DynamoDB UpdateItem with SET expression.
