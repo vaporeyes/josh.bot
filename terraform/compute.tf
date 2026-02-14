@@ -3,12 +3,13 @@
 
 # 1. The Lambda Function
 resource "aws_lambda_function" "josh_bot_api" {
-  filename      = "function.zip"
-  function_name = "josh-bot-api"
-  role          = aws_iam_role.lambda_exec.arn
-  handler       = "bootstrap" # Required for AL2023 Go runtimes
-  runtime       = "provided.al2023"
-  architectures = ["arm64"] # Cost-effective and fast
+  filename         = "function.zip"
+  source_code_hash = filebase64sha256("function.zip")
+  function_name    = "josh-bot-api"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "bootstrap" # Required for AL2023 Go runtimes
+  runtime          = "provided.al2023"
+  architectures    = ["arm64"] # Cost-effective and fast
 
   environment {
     variables = {
