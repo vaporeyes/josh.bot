@@ -28,6 +28,11 @@ func isPublicRoute(method, path string) bool {
 
 // Router handles API Gateway proxy requests with API key validation.
 func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	// Handle CORS preflight
+	if req.HTTPMethod == "OPTIONS" {
+		return jsonResponse(204, ""), nil
+	}
+
 	// Validate API key from x-api-key header (skip for public routes)
 	if !isPublicRoute(req.HTTPMethod, req.Path) {
 		expectedKey := os.Getenv("API_KEY")
@@ -146,6 +151,11 @@ func jsonResponse(statusCode int, body string) events.APIGatewayProxyResponse {
 	return events.APIGatewayProxyResponse{
 		StatusCode: statusCode,
 		Body:       body,
-		Headers:    map[string]string{"Content-Type": "application/json"},
+		Headers: map[string]string{
+			"Content-Type":                "application/json",
+			"Access-Control-Allow-Origin": "*",
+			"Access-Control-Allow-Headers": "Content-Type, x-api-key",
+			"Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, OPTIONS",
+		},
 	}
 }
