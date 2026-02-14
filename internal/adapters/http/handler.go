@@ -4,6 +4,7 @@ package http
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
@@ -25,9 +26,7 @@ func (a *Adapter) StatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(status)
+	writeJSON(w, http.StatusOK, status)
 }
 
 func (a *Adapter) UpdateStatusHandler(w http.ResponseWriter, r *http.Request) {
@@ -42,9 +41,7 @@ func (a *Adapter) UpdateStatusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"ok":true}`))
+	writeOK(w, http.StatusOK)
 }
 
 func (a *Adapter) ProjectsHandler(w http.ResponseWriter, r *http.Request) {
@@ -54,9 +51,7 @@ func (a *Adapter) ProjectsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(projects)
+	writeJSON(w, http.StatusOK, projects)
 }
 
 func (a *Adapter) CreateProjectHandler(w http.ResponseWriter, r *http.Request) {
@@ -71,9 +66,7 @@ func (a *Adapter) CreateProjectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(`{"ok":true}`))
+	writeOK(w, http.StatusCreated)
 }
 
 // ProjectHandler handles GET /v1/projects/{slug}.
@@ -90,9 +83,7 @@ func (a *Adapter) ProjectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(project)
+	writeJSON(w, http.StatusOK, project)
 }
 
 func (a *Adapter) UpdateProjectHandler(w http.ResponseWriter, r *http.Request) {
@@ -113,9 +104,7 @@ func (a *Adapter) UpdateProjectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"ok":true}`))
+	writeOK(w, http.StatusOK)
 }
 
 func (a *Adapter) DeleteProjectHandler(w http.ResponseWriter, r *http.Request) {
@@ -130,7 +119,23 @@ func (a *Adapter) DeleteProjectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	writeOK(w, http.StatusOK)
+}
+
+// writeJSON encodes val as JSON and writes it to the response.
+func writeJSON(w http.ResponseWriter, statusCode int, val any) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"ok":true}`))
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(val); err != nil {
+		log.Printf("failed to encode response: %v", err)
+	}
+}
+
+// writeOK writes a standard {"ok":true} JSON response.
+func writeOK(w http.ResponseWriter, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if _, err := w.Write([]byte(`{"ok":true}`)); err != nil {
+		log.Printf("failed to write response: %v", err)
+	}
 }

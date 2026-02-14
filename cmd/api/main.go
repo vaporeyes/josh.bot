@@ -6,8 +6,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/jduncan/josh-bot/internal/adapters/mock"
 	httpadapter "github.com/jduncan/josh-bot/internal/adapters/http"
+	"github.com/jduncan/josh-bot/internal/adapters/mock"
 )
 
 func main() {

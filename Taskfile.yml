@@ -1,0 +1,123 @@
+# ABOUTME: This file defines common development tasks using go-task.
+# ABOUTME: Run `task --list` to see available commands.
+version: "3"
+
+vars:
+  BINARY: bootstrap
+  LAMBDA_ENTRY: cmd/lambda/main.go
+  TF_DIR: terraform
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  test:
+    desc: Run all Go tests
+    cmds:
+      - go test ./...
+
+  lint:
+    desc: Run Go linters
+    cmds:
+      - golangci-lint run ./...
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - gofmt -w .
+
+  fmt:check:
+    desc: Check Go formatting (no changes)
+    cmds:
+      - test -z "$(gofmt -l .)" || (echo "Files need formatting:" && gofmt -l . && exit 1)
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  build:
+    desc: Build the Lambda binary for deployment
+    cmds:
+      - GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o {{.BINARY}} {{.LAMBDA_ENTRY}}
+
+  package:
+    desc: Build and zip the Lambda deployment package
+    deps: [build]
+    cmds:
+      - zip {{.TF_DIR}}/function.zip {{.BINARY}}
+      - rm {{.BINARY}}
+
+  tf:init:
+    desc: Initialize Terraform
+    dir: "{{.TF_DIR}}"
+    cmds:
+      - terraform init
+
+  tf:plan:
+    desc: Run Terraform plan
+    dir: "{{.TF_DIR}}"
+    cmds:
+      - terraform plan
+
+  tf:apply:
+    desc: Apply Terraform changes
+    dir: "{{.TF_DIR}}"
+    cmds:
+      - terraform apply
+
+  tf:fmt:
+    desc: Format Terraform files
+    dir: "{{.TF_DIR}}"
+    cmds:
+      - terraform fmt
+
+  tf:fmt:check:
+    desc: Check Terraform formatting (no changes)
+    dir: "{{.TF_DIR}}"
+    cmds:
+      - terraform fmt -check
+
+  tf:validate:
+    desc: Validate Terraform configuration
+    dir: "{{.TF_DIR}}"
+    cmds:
+      - terraform validate
+
+  tf:lint:
+    desc: Run TFLint on Terraform code
+    dir: "{{.TF_DIR}}"
+    cmds:
+      - tflint
+
+  seed:status:
+    desc: Seed the DynamoDB table with initial status data
+    cmds:
+      - ./scripts/seed-status.sh
+
+  seed:projects:
+    desc: Seed the DynamoDB table with initial project data
+    cmds:
+      - ./scripts/seed-projects.sh
+
+  seed:
+    desc: Seed all data into DynamoDB
+    deps: [seed:status, seed:projects]
+
+  check:
+    desc: Run all checks (fmt, vet, lint, test)
+    cmds:
+      - task: fmt:check
+      - task: vet
+      - task: lint
+      - task: test
+
+  deploy:
+    desc: Full deploy (check, package, terraform apply)
+    cmds:
+      - task: check
+      - task: package
+      - task: tf:init
+      - task: tf:apply

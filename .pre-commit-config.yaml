@@ -1,0 +1,20 @@
+# ABOUTME: Pre-commit hooks for Go and Terraform code quality.
+# ABOUTME: Install with: pre-commit install
+repos:
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+      - id: go-build
+      - id: go-unit-tests
+
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v1.64.8
+    hooks:
+      - id: golangci-lint
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.96.3
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate

@@ -35,9 +35,9 @@ resource "aws_apigatewayv2_integration" "lambda_link" {
 
 # 3. Catch-all Route to let your Go code handle routing
 resource "aws_apigatewayv2_route" "default_route" {
-  api_id           = aws_apigatewayv2_api.josh_bot_gw.id
-  route_key        = "ANY /{proxy+}"
-  target = "integrations/${aws_apigatewayv2_integration.lambda_link.id}"
+  api_id    = aws_apigatewayv2_api.josh_bot_gw.id
+  route_key = "ANY /{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_link.id}"
 }
 
 # 4. Lambda Permission to allow API Gateway calls
