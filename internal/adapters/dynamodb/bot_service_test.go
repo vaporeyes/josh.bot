@@ -1,5 +1,5 @@
 // ABOUTME: This file contains tests for the DynamoDB-backed BotService.
-// ABOUTME: It uses a mock ItemGetter to test without hitting real DynamoDB.
+// ABOUTME: It uses a mock DynamoDBClient to test without hitting real DynamoDB.
 package dynamodb
 
 import (
@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/jduncan/josh-bot/internal/domain"
 )
 
 // mockDynamoDBClient implements DynamoDBClient for testing.
@@ -16,7 +17,15 @@ type mockDynamoDBClient struct {
 	getErr       error
 	updateOutput *dynamodb.UpdateItemOutput
 	updateErr    error
-	updateInput  *dynamodb.UpdateItemInput // captured for assertions
+	updateInput  *dynamodb.UpdateItemInput
+	queryOutput  *dynamodb.QueryOutput
+	queryErr     error
+	putOutput    *dynamodb.PutItemOutput
+	putErr       error
+	putInput     *dynamodb.PutItemInput
+	deleteOutput *dynamodb.DeleteItemOutput
+	deleteErr    error
+	deleteInput  *dynamodb.DeleteItemInput
 }
 
 func (m *mockDynamoDBClient) GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
@@ -27,6 +36,22 @@ func (m *mockDynamoDBClient) UpdateItem(ctx context.Context, params *dynamodb.Up
 	m.updateInput = params
 	return m.updateOutput, m.updateErr
 }
+
+func (m *mockDynamoDBClient) Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	return m.queryOutput, m.queryErr
+}
+
+func (m *mockDynamoDBClient) PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+	m.putInput = params
+	return m.putOutput, m.putErr
+}
+
+func (m *mockDynamoDBClient) DeleteItem(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
+	m.deleteInput = params
+	return m.deleteOutput, m.deleteErr
+}
+
+// --- Status Tests ---
 
 func TestGetStatus_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{
@@ -76,9 +101,7 @@ func TestGetStatus_Success(t *testing.T) {
 
 func TestGetStatus_ItemNotFound(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		getOutput: &dynamodb.GetItemOutput{
-			Item: nil,
-		},
+		getOutput: &dynamodb.GetItemOutput{Item: nil},
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
@@ -89,9 +112,7 @@ func TestGetStatus_ItemNotFound(t *testing.T) {
 }
 
 func TestGetStatus_DynamoDBError(t *testing.T) {
-	mock := &mockDynamoDBClient{
-		getErr: context.DeadlineExceeded,
-	}
+	mock := &mockDynamoDBClient{getErr: context.DeadlineExceeded}
 
 	svc := NewBotService(mock, "josh-bot-data")
 	_, err := svc.GetStatus()
@@ -100,31 +121,8 @@ func TestGetStatus_DynamoDBError(t *testing.T) {
 	}
 }
 
-func TestGetProjects_Success(t *testing.T) {
-	mock := &mockDynamoDBClient{
-		getOutput: &dynamodb.GetItemOutput{
-			Item: map[string]types.AttributeValue{
-				"id": &types.AttributeValueMemberS{Value: "status"},
-			},
-		},
-	}
-
-	svc := NewBotService(mock, "josh-bot-data")
-	projects, err := svc.GetProjects()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Projects are still hardcoded for now
-	if len(projects) < 2 {
-		t.Errorf("expected at least 2 projects, got %d", len(projects))
-	}
-}
-
 func TestUpdateStatus_Success(t *testing.T) {
-	mock := &mockDynamoDBClient{
-		updateOutput: &dynamodb.UpdateItemOutput{},
-	}
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
 	err := svc.UpdateStatus(map[string]any{
@@ -135,19 +133,16 @@ func TestUpdateStatus_Success(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify UpdateItem was called with the right table and key
 	if mock.updateInput == nil {
 		t.Fatal("expected UpdateItem to be called")
 	}
 	if *mock.updateInput.TableName != "josh-bot-data" {
 		t.Errorf("expected table 'josh-bot-data', got '%s'", *mock.updateInput.TableName)
 	}
-	// Verify the expression contains our fields
 	expr := *mock.updateInput.UpdateExpression
 	if len(expr) == 0 {
 		t.Error("expected non-empty update expression")
 	}
-	// Verify updated_at is always included
 	if _, ok := mock.updateInput.ExpressionAttributeNames["#updated_at"]; !ok {
 		t.Error("expected updated_at in expression attribute names")
 	}
@@ -155,7 +150,6 @@ func TestUpdateStatus_Success(t *testing.T) {
 
 func TestUpdateStatus_EmptyFields(t *testing.T) {
 	mock := &mockDynamoDBClient{}
-
 	svc := NewBotService(mock, "josh-bot-data")
 	err := svc.UpdateStatus(map[string]any{})
 	if err == nil {
@@ -165,25 +159,211 @@ func TestUpdateStatus_EmptyFields(t *testing.T) {
 
 func TestUpdateStatus_InvalidField(t *testing.T) {
 	mock := &mockDynamoDBClient{}
-
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateStatus(map[string]any{
-		"hacker_field": "nope",
-	})
+	err := svc.UpdateStatus(map[string]any{"hacker_field": "nope"})
 	if err == nil {
 		t.Error("expected error for invalid field, got nil")
 	}
 }
 
 func TestUpdateStatus_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{updateErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateStatus(map[string]any{"status": "busy"})
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+// --- Project Tests ---
+
+func TestGetProjects_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		updateErr: context.DeadlineExceeded,
+		queryOutput: &dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{
+				{
+					"id":          &types.AttributeValueMemberS{Value: "project#modular-aws-backend"},
+					"slug":        &types.AttributeValueMemberS{Value: "modular-aws-backend"},
+					"name":        &types.AttributeValueMemberS{Value: "Modular AWS Backend"},
+					"stack":       &types.AttributeValueMemberS{Value: "Go, AWS"},
+					"description": &types.AttributeValueMemberS{Value: "Read-only S3/DynamoDB access."},
+					"url":         &types.AttributeValueMemberS{Value: "https://github.com/vaporeyes/josh-bot"},
+					"status":      &types.AttributeValueMemberS{Value: "active"},
+				},
+				{
+					"id":          &types.AttributeValueMemberS{Value: "project#modernist-cookbot"},
+					"slug":        &types.AttributeValueMemberS{Value: "modernist-cookbot"},
+					"name":        &types.AttributeValueMemberS{Value: "Modernist Cookbot"},
+					"stack":       &types.AttributeValueMemberS{Value: "Python, Anthropic"},
+					"description": &types.AttributeValueMemberS{Value: "AI sous-chef for sous-vide."},
+					"url":         &types.AttributeValueMemberS{Value: "https://github.com/vaporeyes/cookbot"},
+					"status":      &types.AttributeValueMemberS{Value: "active"},
+				},
+			},
+		},
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateStatus(map[string]any{
-		"status": "busy",
+	projects, err := svc.GetProjects()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(projects) != 2 {
+		t.Fatalf("expected 2 projects, got %d", len(projects))
+	}
+	if projects[0].Slug != "modular-aws-backend" {
+		t.Errorf("expected slug 'modular-aws-backend', got '%s'", projects[0].Slug)
+	}
+	if projects[1].Name != "Modernist Cookbot" {
+		t.Errorf("expected name 'Modernist Cookbot', got '%s'", projects[1].Name)
+	}
+}
+
+func TestGetProjects_Empty(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		queryOutput: &dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	projects, err := svc.GetProjects()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(projects) != 0 {
+		t.Errorf("expected 0 projects, got %d", len(projects))
+	}
+}
+
+func TestGetProject_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"id":          &types.AttributeValueMemberS{Value: "project#modular-aws-backend"},
+				"slug":        &types.AttributeValueMemberS{Value: "modular-aws-backend"},
+				"name":        &types.AttributeValueMemberS{Value: "Modular AWS Backend"},
+				"stack":       &types.AttributeValueMemberS{Value: "Go, AWS"},
+				"description": &types.AttributeValueMemberS{Value: "Read-only S3/DynamoDB access."},
+				"url":         &types.AttributeValueMemberS{Value: "https://github.com/vaporeyes/josh-bot"},
+				"status":      &types.AttributeValueMemberS{Value: "active"},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	project, err := svc.GetProject("modular-aws-backend")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if project.Name != "Modular AWS Backend" {
+		t.Errorf("expected name 'Modular AWS Backend', got '%s'", project.Name)
+	}
+	if project.URL != "https://github.com/vaporeyes/josh-bot" {
+		t.Errorf("expected url, got '%s'", project.URL)
+	}
+}
+
+func TestGetProject_NotFound(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{Item: nil},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetProject("nonexistent")
+	if err == nil {
+		t.Error("expected error for missing project, got nil")
+	}
+}
+
+func TestCreateProject_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.CreateProject(domain.Project{
+		Slug:        "new-project",
+		Name:        "New Project",
+		Stack:       "Go",
+		Description: "A new thing",
+		URL:         "https://github.com/vaporeyes/new",
+		Status:      "active",
 	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.putInput == nil {
+		t.Fatal("expected PutItem to be called")
+	}
+	if *mock.putInput.TableName != "josh-bot-data" {
+		t.Errorf("expected table 'josh-bot-data', got '%s'", *mock.putInput.TableName)
+	}
+	// Verify the item has the correct id key
+	idAttr, ok := mock.putInput.Item["id"]
+	if !ok {
+		t.Fatal("expected 'id' in put item")
+	}
+	if idAttr.(*types.AttributeValueMemberS).Value != "project#new-project" {
+		t.Errorf("expected id 'project#new-project', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+}
+
+func TestCreateProject_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.CreateProject(domain.Project{Slug: "test", Name: "Test"})
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+func TestUpdateProject_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateProject("modular-aws-backend", map[string]any{
+		"status": "archived",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.updateInput == nil {
+		t.Fatal("expected UpdateItem to be called")
+	}
+	// Verify key uses project# prefix
+	idAttr := mock.updateInput.Key["id"]
+	if idAttr.(*types.AttributeValueMemberS).Value != "project#modular-aws-backend" {
+		t.Errorf("expected key 'project#modular-aws-backend', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+}
+
+func TestUpdateProject_InvalidField(t *testing.T) {
+	mock := &mockDynamoDBClient{}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateProject("test", map[string]any{"hacker": "nope"})
+	if err == nil {
+		t.Error("expected error for invalid field, got nil")
+	}
+}
+
+func TestDeleteProject_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.DeleteProject("modular-aws-backend")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.deleteInput == nil {
+		t.Fatal("expected DeleteItem to be called")
+	}
+	idAttr := mock.deleteInput.Key["id"]
+	if idAttr.(*types.AttributeValueMemberS).Value != "project#modular-aws-backend" {
+		t.Errorf("expected key 'project#modular-aws-backend', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+}
+
+func TestDeleteProject_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.DeleteProject("test")
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}

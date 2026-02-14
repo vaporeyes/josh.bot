@@ -1,5 +1,5 @@
 // ABOUTME: This file implements a DynamoDB-backed BotService.
-// ABOUTME: It fetches and updates status data in a DynamoDB table, allowing changes without redeployment.
+// ABOUTME: It provides CRUD for status and projects using a single-table design.
 package dynamodb
 
 import (
@@ -18,14 +18,23 @@ import (
 type DynamoDBClient interface {
 	GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 	UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
+	Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
+	PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
+	DeleteItem(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
 }
 
-// allowedFields defines which status fields can be updated via PUT.
-var allowedFields = map[string]bool{
+// allowedStatusFields defines which status fields can be updated via PUT.
+var allowedStatusFields = map[string]bool{
 	"name": true, "title": true, "bio": true,
 	"current_activity": true, "location": true,
 	"availability": true, "status": true,
 	"links": true, "interests": true,
+}
+
+// allowedProjectFields defines which project fields can be updated via PUT.
+var allowedProjectFields = map[string]bool{
+	"name": true, "stack": true, "description": true,
+	"url": true, "status": true,
 }
 
 // BotService implements domain.BotService using DynamoDB.
@@ -38,6 +47,8 @@ type BotService struct {
 func NewBotService(client DynamoDBClient, tableName string) *BotService {
 	return &BotService{client: client, tableName: tableName}
 }
+
+// --- Status Operations ---
 
 // GetStatus fetches the status item from DynamoDB.
 func (s *BotService) GetStatus() (domain.Status, error) {
@@ -69,17 +80,125 @@ func (s *BotService) UpdateStatus(fields map[string]any) error {
 		return fmt.Errorf("no fields provided for update")
 	}
 
-	// Validate all fields before building the expression
 	for key := range fields {
-		if !allowedFields[key] {
+		if !allowedStatusFields[key] {
 			return fmt.Errorf("field %q is not an updatable status field", key)
 		}
 	}
 
-	// Always set updated_at
+	return s.updateItem("status", fields)
+}
+
+// --- Project Operations ---
+
+// GetProjects fetches all projects from DynamoDB using a Query with begins_with.
+func (s *BotService) GetProjects() ([]domain.Project, error) {
+	keyExpr := "begins_with(id, :prefix)"
+	output, err := s.client.Query(context.Background(), &dynamodb.QueryInput{
+		TableName:              &s.tableName,
+		KeyConditionExpression: &keyExpr,
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":prefix": &types.AttributeValueMemberS{Value: "project#"},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("dynamodb Query: %w", err)
+	}
+
+	projects := make([]domain.Project, 0, len(output.Items))
+	for _, item := range output.Items {
+		var p domain.Project
+		if err := attributevalue.UnmarshalMap(item, &p); err != nil {
+			return nil, fmt.Errorf("unmarshal project: %w", err)
+		}
+		projects = append(projects, p)
+	}
+
+	return projects, nil
+}
+
+// GetProject fetches a single project by slug from DynamoDB.
+func (s *BotService) GetProject(slug string) (domain.Project, error) {
+	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: "project#" + slug},
+		},
+	})
+	if err != nil {
+		return domain.Project{}, fmt.Errorf("dynamodb GetItem: %w", err)
+	}
+	if output.Item == nil {
+		return domain.Project{}, fmt.Errorf("project %q not found", slug)
+	}
+
+	var project domain.Project
+	if err := attributevalue.UnmarshalMap(output.Item, &project); err != nil {
+		return domain.Project{}, fmt.Errorf("unmarshal project: %w", err)
+	}
+
+	return project, nil
+}
+
+// CreateProject adds a new project to DynamoDB.
+func (s *BotService) CreateProject(project domain.Project) error {
+	project.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+
+	item, err := attributevalue.MarshalMap(project)
+	if err != nil {
+		return fmt.Errorf("marshal project: %w", err)
+	}
+	// Set the partition key using the slug
+	item["id"] = &types.AttributeValueMemberS{Value: "project#" + project.Slug}
+
+	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+		TableName: &s.tableName,
+		Item:      item,
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb PutItem: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateProject updates specific fields on a project in DynamoDB.
+// Only fields in the allowlist are accepted. updated_at is set automatically.
+func (s *BotService) UpdateProject(slug string, fields map[string]any) error {
+	if len(fields) == 0 {
+		return fmt.Errorf("no fields provided for update")
+	}
+
+	for key := range fields {
+		if !allowedProjectFields[key] {
+			return fmt.Errorf("field %q is not an updatable project field", key)
+		}
+	}
+
+	return s.updateItem("project#"+slug, fields)
+}
+
+// DeleteProject removes a project from DynamoDB.
+func (s *BotService) DeleteProject(slug string) error {
+	_, err := s.client.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: "project#" + slug},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb DeleteItem: %w", err)
+	}
+	return nil
+}
+
+// --- Shared Helpers ---
+
+// updateItem builds and executes a DynamoDB UpdateItem with SET expression.
+// Automatically adds updated_at timestamp.
+func (s *BotService) updateItem(id string, fields map[string]any) error {
 	fields["updated_at"] = time.Now().UTC().Format(time.RFC3339)
 
-	// Build SET expression: SET #field1 = :field1, #field2 = :field2, ...
 	var setParts []string
 	exprNames := make(map[string]string)
 	exprValues := make(map[string]types.AttributeValue)
@@ -102,7 +221,7 @@ func (s *BotService) UpdateStatus(fields map[string]any) error {
 	_, err := s.client.UpdateItem(context.Background(), &dynamodb.UpdateItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
-			"id": &types.AttributeValueMemberS{Value: "status"},
+			"id": &types.AttributeValueMemberS{Value: id},
 		},
 		UpdateExpression:          &updateExpr,
 		ExpressionAttributeNames:  exprNames,
@@ -113,13 +232,4 @@ func (s *BotService) UpdateStatus(fields map[string]any) error {
 	}
 
 	return nil
-}
-
-// GetProjects returns hardcoded projects for now.
-// AIDEV-TODO: move projects to DynamoDB when implementing /v1/projects with real data
-func (s *BotService) GetProjects() ([]domain.Project, error) {
-	return []domain.Project{
-		{Name: "Modular AWS Backend", Stack: "Go, AWS", Description: "Read-only S3/DynamoDB access."},
-		{Name: "Modernist Cookbot", Stack: "Python, Anthropic", Description: "AI sous-chef for sous-vide."},
-	}, nil
 }

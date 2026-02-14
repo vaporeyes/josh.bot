@@ -2,7 +2,11 @@
 // ABOUTME: It returns hardcoded data to decouple tests from real data sources.
 package mock
 
-import "github.com/jduncan/josh-bot/internal/domain"
+import (
+	"fmt"
+
+	"github.com/jduncan/josh-bot/internal/domain"
+)
 
 // BotService is a mock implementation of the domain.BotService interface.
 type BotService struct{}
@@ -38,7 +42,33 @@ func (s *BotService) UpdateStatus(fields map[string]any) error {
 // GetProjects returns a hardcoded list of projects.
 func (s *BotService) GetProjects() ([]domain.Project, error) {
 	return []domain.Project{
-		{Name: "Modular AWS Backend", Stack: "Go, AWS", Description: "Read-only S3/DynamoDB access."},
-		{Name: "Modernist Cookbot", Stack: "Python, Anthropic", Description: "AI sous-chef for sous-vide."},
+		{Slug: "modular-aws-backend", Name: "Modular AWS Backend", Stack: "Go, AWS", Description: "Read-only S3/DynamoDB access.", URL: "https://github.com/vaporeyes/josh-bot", Status: "active"},
+		{Slug: "modernist-cookbot", Name: "Modernist Cookbot", Stack: "Python, Anthropic", Description: "AI sous-chef for sous-vide.", URL: "https://github.com/vaporeyes/cookbot", Status: "active"},
 	}, nil
+}
+
+// GetProject returns a hardcoded project by slug.
+func (s *BotService) GetProject(slug string) (domain.Project, error) {
+	projects, _ := s.GetProjects()
+	for _, p := range projects {
+		if p.Slug == slug {
+			return p, nil
+		}
+	}
+	return domain.Project{}, fmt.Errorf("project %q not found", slug)
+}
+
+// CreateProject is a no-op in the mock adapter.
+func (s *BotService) CreateProject(project domain.Project) error {
+	return nil
+}
+
+// UpdateProject is a no-op in the mock adapter.
+func (s *BotService) UpdateProject(slug string, fields map[string]any) error {
+	return nil
+}
+
+// DeleteProject is a no-op in the mock adapter.
+func (s *BotService) DeleteProject(slug string) error {
+	return nil
 }

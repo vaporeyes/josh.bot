@@ -226,6 +226,112 @@ func TestRouter_PutProjects_MethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestRouter_PostProject_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/projects",
+		Headers:    map[string]string{"x-api-key": "key"},
+		Body:       `{"slug":"new-proj","name":"New Project","stack":"Go","description":"A thing","url":"https://github.com/vaporeyes/new","status":"active"}`,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 201 {
+		t.Errorf("expected 201, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestRouter_PostProject_InvalidJSON(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/projects",
+		Headers:    map[string]string{"x-api-key": "key"},
+		Body:       `{bad json`,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 400 {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestRouter_GetProject_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "GET",
+		Path:       "/v1/projects/modular-aws-backend",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d: %s", resp.StatusCode, resp.Body)
+	}
+
+	var project domain.Project
+	if err := json.Unmarshal([]byte(resp.Body), &project); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if project.Name != "Modular AWS Backend" {
+		t.Errorf("expected name 'Modular AWS Backend', got '%s'", project.Name)
+	}
+}
+
+func TestRouter_PutProject_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "PUT",
+		Path:       "/v1/projects/modular-aws-backend",
+		Headers:    map[string]string{"x-api-key": "key"},
+		Body:       `{"status":"archived"}`,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestRouter_DeleteProject_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "DELETE",
+		Path:       "/v1/projects/modular-aws-backend",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
 func TestRouter_NotFound(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 

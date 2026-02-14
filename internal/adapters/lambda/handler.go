@@ -5,6 +5,7 @@ package lambda
 import (
 	"encoding/json"
 	"os"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/jduncan/josh-bot/internal/domain"
@@ -25,18 +26,17 @@ func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayPr
 	// Validate API key from x-api-key header
 	expectedKey := os.Getenv("API_KEY")
 	if expectedKey != "" && req.Headers["x-api-key"] != expectedKey {
-		return events.APIGatewayProxyResponse{
-			StatusCode: 401,
-			Body:       `{"error":"unauthorized"}`,
-			Headers:    map[string]string{"Content-Type": "application/json"},
-		}, nil
+		return jsonResponse(401, `{"error":"unauthorized"}`), nil
 	}
 
-	switch req.Path {
-	case "/v1/status":
+	switch {
+	case req.Path == "/v1/status":
 		return a.handleStatus(req)
-	case "/v1/projects":
+	case req.Path == "/v1/projects":
 		return a.handleProjects(req)
+	case strings.HasPrefix(req.Path, "/v1/projects/"):
+		slug := strings.TrimPrefix(req.Path, "/v1/projects/")
+		return a.handleProject(req, slug)
 	default:
 		return jsonResponse(404, `{"error":"not found"}`), nil
 	}
@@ -71,21 +71,68 @@ func (a *Adapter) handleStatus(req events.APIGatewayProxyRequest) (events.APIGat
 	}
 }
 
-// handleProjects routes GET for /v1/projects.
+// handleProjects routes GET (list) and POST (create) for /v1/projects.
 func (a *Adapter) handleProjects(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if req.HTTPMethod != "GET" {
+	switch req.HTTPMethod {
+	case "GET":
+		projects, err := a.service.GetProjects()
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		body, err := json.Marshal(projects)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "POST":
+		var project domain.Project
+		if err := json.Unmarshal([]byte(req.Body), &project); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.service.CreateProject(project); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(201, `{"ok":true}`), nil
+
+	default:
 		return jsonResponse(405, `{"error":"method not allowed"}`), nil
 	}
+}
 
-	projects, err := a.service.GetProjects()
-	if err != nil {
-		return jsonResponse(500, `{"error":"internal server error"}`), err
+// handleProject routes GET, PUT, DELETE for /v1/projects/{slug}.
+func (a *Adapter) handleProject(req events.APIGatewayProxyRequest, slug string) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		project, err := a.service.GetProject(slug)
+		if err != nil {
+			return jsonResponse(404, `{"error":"project not found"}`), nil
+		}
+		body, err := json.Marshal(project)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "PUT":
+		var fields map[string]any
+		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.service.UpdateProject(slug, fields); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	case "DELETE":
+		if err := a.service.DeleteProject(slug); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
 	}
-	body, err := json.Marshal(projects)
-	if err != nil {
-		return jsonResponse(500, `{"error":"internal server error"}`), err
-	}
-	return jsonResponse(200, string(body)), nil
 }
 
 func jsonResponse(statusCode int, body string) events.APIGatewayProxyResponse {
