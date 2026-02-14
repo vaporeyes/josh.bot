@@ -18,8 +18,8 @@ type mockDynamoDBClient struct {
 	updateOutput *dynamodb.UpdateItemOutput
 	updateErr    error
 	updateInput  *dynamodb.UpdateItemInput
-	queryOutput  *dynamodb.QueryOutput
-	queryErr     error
+	scanOutput   *dynamodb.ScanOutput
+	scanErr      error
 	putOutput    *dynamodb.PutItemOutput
 	putErr       error
 	putInput     *dynamodb.PutItemInput
@@ -37,8 +37,8 @@ func (m *mockDynamoDBClient) UpdateItem(ctx context.Context, params *dynamodb.Up
 	return m.updateOutput, m.updateErr
 }
 
-func (m *mockDynamoDBClient) Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
-	return m.queryOutput, m.queryErr
+func (m *mockDynamoDBClient) Scan(ctx context.Context, params *dynamodb.ScanInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
+	return m.scanOutput, m.scanErr
 }
 
 func (m *mockDynamoDBClient) PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
@@ -179,7 +179,7 @@ func TestUpdateStatus_DynamoDBError(t *testing.T) {
 
 func TestGetProjects_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		queryOutput: &dynamodb.QueryOutput{
+		scanOutput: &dynamodb.ScanOutput{
 			Items: []map[string]types.AttributeValue{
 				{
 					"id":          &types.AttributeValueMemberS{Value: "project#modular-aws-backend"},
@@ -221,7 +221,7 @@ func TestGetProjects_Success(t *testing.T) {
 
 func TestGetProjects_Empty(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		queryOutput: &dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}},
+		scanOutput: &dynamodb.ScanOutput{Items: []map[string]types.AttributeValue{}},
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")

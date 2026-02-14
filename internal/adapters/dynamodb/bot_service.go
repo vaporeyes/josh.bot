@@ -18,7 +18,7 @@ import (
 type DynamoDBClient interface {
 	GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 	UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
-	Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
+	Scan(ctx context.Context, params *dynamodb.ScanInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error)
 	PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 	DeleteItem(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
 }
@@ -91,18 +91,19 @@ func (s *BotService) UpdateStatus(fields map[string]any) error {
 
 // --- Project Operations ---
 
-// GetProjects fetches all projects from DynamoDB using a Query with begins_with.
+// GetProjects fetches all projects from DynamoDB using a Scan with a filter.
+// AIDEV-NOTE: Uses Scan instead of Query because the table has no sort key.
 func (s *BotService) GetProjects() ([]domain.Project, error) {
-	keyExpr := "begins_with(id, :prefix)"
-	output, err := s.client.Query(context.Background(), &dynamodb.QueryInput{
-		TableName:              &s.tableName,
-		KeyConditionExpression: &keyExpr,
+	filterExpr := "begins_with(id, :prefix)"
+	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+		TableName:        &s.tableName,
+		FilterExpression: &filterExpr,
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":prefix": &types.AttributeValueMemberS{Value: "project#"},
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("dynamodb Query: %w", err)
+		return nil, fmt.Errorf("dynamodb Scan: %w", err)
 	}
 
 	projects := make([]domain.Project, 0, len(output.Items))

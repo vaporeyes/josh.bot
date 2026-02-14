@@ -34,7 +34,7 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
         Action = [
           "dynamodb:GetItem",
           "dynamodb:UpdateItem",
-          "dynamodb:Query",
+          "dynamodb:Scan",
           "dynamodb:PutItem",
           "dynamodb:DeleteItem",
         ]
