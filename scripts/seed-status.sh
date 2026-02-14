@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# ABOUTME: Seeds the josh-bot-data DynamoDB table with initial status data.
+# ABOUTME: Run this once after creating the table: ./scripts/seed-status.sh
+
+set -euo pipefail
+
+TABLE_NAME="${1:-josh-bot-data}"
+
+aws dynamodb put-item \
+  --table-name "$TABLE_NAME" \
+  --item '{
+    "id": {"S": "status"},
+    "name": {"S": "Josh Duncan"},
+    "title": {"S": "Platform Engineer"},
+    "bio": {"S": "Builder of systems, lifter of heavy things, cooker of sous vide."},
+    "current_activity": {"S": "Building josh.bot"},
+    "location": {"S": "Clarksville, TN"},
+    "availability": {"S": "Open to interesting projects"},
+    "status": {"S": "ok"},
+    "links": {"M": {
+      "github": {"S": "https://github.com/jduncan"},
+      "linkedin": {"S": "https://linkedin.com/in/jduncan"}
+    }},
+    "interests": {"L": [
+      {"S": "Go"},
+      {"S": "AWS"},
+      {"S": "Sous vide"},
+      {"S": "Powerlifting"},
+      {"S": "Art Nouveau"}
+    ]}
+  }'
+
+echo "Seeded status item in $TABLE_NAME"
