@@ -23,37 +23,6 @@ resource "aws_iam_role_policy_attachment" "lambda_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# OIDC Provider for GitHub Actions
-resource "aws_iam_openid_connect_provider" "github" {
-  url = "https://token.actions.githubusercontent.com"
-
-  client_id_list = [
-    "sts.amazonaws.com"
-  ]
-
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
-}
-
-data "aws_iam_policy_document" "github_actions_assume_role" {
-  statement {
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-    principals {
-      type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
-    }
-    condition {
-      test     = "StringLike"
-      variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:vaporeyes/josh.bot:*"]
-    }
-  }
-}
-
-resource "aws_iam_role" "github_actions" {
-  name               = "GithubOIDCAdmin"
-  assume_role_policy = data.aws_iam_policy_document.github_actions_assume_role.json
-}
-
 resource "aws_iam_policy" "github_actions" {
   name = "josh-bot-github-actions-policy"
   policy = jsonencode({
@@ -63,7 +32,7 @@ resource "aws_iam_policy" "github_actions" {
         Action = [
           "iam:PassRole"
         ]
-        Effect   = "Allow"
+        Effect = "Allow"
         Resource = [
           aws_iam_role.lambda_exec.arn
         ]
@@ -74,7 +43,7 @@ resource "aws_iam_policy" "github_actions" {
           "s3:PutObject",
           "s3:ListBucket"
         ]
-        Effect   = "Allow"
+        Effect = "Allow"
         Resource = [
           "arn:aws:s3:::jduncanz-terraform-state-bucket",
           "arn:aws:s3:::jduncanz-terraform-state-bucket/*"
@@ -82,12 +51,12 @@ resource "aws_iam_policy" "github_actions" {
       },
       {
         Action = [
-            "lambda:UpdateFunctionCode",
-            "lambda:GetFunctionConfiguration"
+          "lambda:UpdateFunctionCode",
+          "lambda:GetFunctionConfiguration"
         ]
         Effect = "Allow"
         Resource = [
-            aws_lambda_function.josh_bot_api.arn
+          aws_lambda_function.josh_bot_api.arn
         ]
       }
     ]
