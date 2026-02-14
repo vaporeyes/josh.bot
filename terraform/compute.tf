@@ -26,9 +26,10 @@ resource "aws_apigatewayv2_api" "josh_bot_gw" {
 }
 
 resource "aws_apigatewayv2_integration" "lambda_link" {
-  api_id           = aws_apigatewayv2_api.josh_bot_gw.id
-  integration_type = "AWS_PROXY"
-  integration_uri  = aws_lambda_function.josh_bot_api.invoke_arn
+  api_id                 = aws_apigatewayv2_api.josh_bot_gw.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.josh_bot_api.invoke_arn
+  payload_format_version = "1.0"
 }
 
 # 3. Catch-all Route to let your Go code handle routing
