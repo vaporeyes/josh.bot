@@ -2,11 +2,17 @@
 // ABOUTME: It represents the central business logic of the application.
 package domain
 
-// Status represents the current state of the bot.
+// Status represents the current state of the bot and its owner.
 type Status struct {
-	CurrentActivity string `json:"current_activity"`
-	Location        string `json:"location"`
-	Status          string `json:"status"`
+	Name            string            `json:"name"`
+	Title           string            `json:"title"`
+	Bio             string            `json:"bio"`
+	CurrentActivity string            `json:"current_activity"`
+	Location        string            `json:"location"`
+	Availability    string            `json:"availability"`
+	Status          string            `json:"status"`
+	Links           map[string]string `json:"links"`
+	Interests       []string          `json:"interests"`
 }
 
 // Project represents a software project or effort.

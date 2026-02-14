@@ -15,9 +15,18 @@ func NewBotService() *BotService {
 // GetStatus returns a hardcoded status for testing.
 func (s *BotService) GetStatus() (domain.Status, error) {
 	return domain.Status{
+		Name:            "Josh Duncan",
+		Title:           "Platform Engineer",
+		Bio:             "Builder of systems, lifter of heavy things, cooker of sous vide.",
 		CurrentActivity: "Refining Go backends for josh.bot",
 		Location:        "Clarksville, TN",
+		Availability:    "Open to interesting projects",
 		Status:          "ok",
+		Links: map[string]string{
+			"github":   "https://github.com/jduncan",
+			"linkedin": "https://linkedin.com/in/jduncan",
+		},
+		Interests: []string{"Go", "AWS", "Sous vide", "Powerlifting", "Art Nouveau"},
 	}, nil
 }
 

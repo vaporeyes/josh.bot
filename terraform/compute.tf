@@ -13,8 +13,9 @@ resource "aws_lambda_function" "josh_bot_api" {
 
   environment {
     variables = {
-      APP_ENV = "production"
-      API_KEY = random_password.api_key.result
+      APP_ENV    = "production"
+      API_KEY    = random_password.api_key.result
+      TABLE_NAME = aws_dynamodb_table.josh_bot_data.name
     }
   }
 }
@@ -55,7 +56,19 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 }
 
-# 6. API Key (generated and stored in SSM, passed to Lambda as env var)
+# 6. DynamoDB table for bot data (single-table design)
+resource "aws_dynamodb_table" "josh_bot_data" {
+  name         = "josh-bot-data"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+}
+
+# 7. API Key (generated and stored in SSM, passed to Lambda as env var)
 resource "random_password" "api_key" {
   length  = 40
   special = false

@@ -12,14 +12,14 @@ aws dynamodb put-item \
     "id": {"S": "status"},
     "name": {"S": "Josh Duncan"},
     "title": {"S": "Platform Engineer"},
-    "bio": {"S": "Builder of systems, lifter of heavy things, cooker of sous vide."},
+    "bio": {"S": "Builder of systems, lifter of heavy things, maker and whatnot."},
     "current_activity": {"S": "Building josh.bot"},
     "location": {"S": "Clarksville, TN"},
     "availability": {"S": "Open to interesting projects"},
     "status": {"S": "ok"},
     "links": {"M": {
-      "github": {"S": "https://github.com/jduncan"},
-      "linkedin": {"S": "https://linkedin.com/in/jduncan"}
+      "github": {"S": "https://github.com/vaporeyes"},
+      "linkedin": {"S": "https://www.linkedin.com/in/josh-duncan-919138175/"}
     }},
     "interests": {"L": [
       {"S": "Go"},

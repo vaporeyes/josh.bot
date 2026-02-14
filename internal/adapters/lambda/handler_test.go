@@ -3,11 +3,13 @@
 package lambda
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/jduncan/josh-bot/internal/adapters/mock"
+	"github.com/jduncan/josh-bot/internal/domain"
 )
 
 func TestRouter_ValidAPIKey(t *testing.T) {
@@ -98,11 +100,23 @@ func TestRouter_StatusEndpoint(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
-	if !strings.Contains(resp.Body, "Refining Go backends") {
-		t.Errorf("unexpected body: %v", resp.Body)
+
+	var status domain.Status
+	if err := json.Unmarshal([]byte(resp.Body), &status); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
 	}
-	if !strings.Contains(resp.Body, `"status":"ok"`) {
-		t.Errorf("missing status field in body: %v", resp.Body)
+
+	if status.Name != "Josh Duncan" {
+		t.Errorf("expected name 'Josh Duncan', got '%s'", status.Name)
+	}
+	if status.Status != "ok" {
+		t.Errorf("expected status 'ok', got '%s'", status.Status)
+	}
+	if len(status.Links) == 0 {
+		t.Error("expected links to be non-empty")
+	}
+	if len(status.Interests) == 0 {
+		t.Error("expected interests to be non-empty")
 	}
 }
 

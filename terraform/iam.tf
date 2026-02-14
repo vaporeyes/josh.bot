@@ -23,6 +23,24 @@ resource "aws_iam_role_policy_attachment" "lambda_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role_policy" "lambda_dynamodb" {
+  name = "josh-bot-lambda-dynamodb"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "dynamodb:GetItem",
+        ]
+        Effect   = "Allow"
+        Resource = aws_dynamodb_table.josh_bot_data.arn
+      }
+    ]
+  })
+}
+
 resource "aws_iam_policy" "github_actions" {
   name = "josh-bot-github-actions-policy"
   policy = jsonencode({
