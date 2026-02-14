@@ -16,8 +16,9 @@ resource "aws_lambda_function" "josh_bot_api" {
 
 # 2. API Gateway (HTTP API - cheaper and faster than REST API)
 resource "aws_apigatewayv2_api" "josh_bot_gw" {
-  name          = "josh-bot-gateway"
-  protocol_type = "HTTP"
+  name                         = "josh-bot-gateway"
+  protocol_type                = "HTTP"
+  api_key_selection_expression = "$request.header.x-api-key"
 }
 
 resource "aws_apigatewayv2_integration" "lambda_link" {
@@ -28,9 +29,10 @@ resource "aws_apigatewayv2_integration" "lambda_link" {
 
 # 3. Catch-all Route to let your Go code handle routing
 resource "aws_apigatewayv2_route" "default_route" {
-  api_id    = aws_apigatewayv2_api.josh_bot_gw.id
-  route_key = "ANY /{proxy+}"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda_link.id}"
+  api_id           = aws_apigatewayv2_api.josh_bot_gw.id
+  route_key        = "ANY /{proxy+}"
+  target           = "integrations/${aws_apigatewayv2_integration.lambda_link.id}"
+  api_key_required = true
 }
 
 # 4. Lambda Permission to allow API Gateway calls
@@ -40,4 +42,25 @@ resource "aws_lambda_permission" "api_gw" {
   function_name = aws_lambda_function.josh_bot_api.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.josh_bot_gw.execution_arn}/*/*"
+}
+
+# 5. API Key and Usage Plan
+resource "aws_apigatewayv2_api_key" "default" {
+  name   = "josh-bot-api-key"
+  api_id = aws_apigatewayv2_api.josh_bot_gw.id
+}
+
+resource "aws_apigatewayv2_usage_plan" "default" {
+  name   = "josh-bot-usage-plan"
+  api_id = aws_apigatewayv2_api.josh_bot_gw.id
+}
+
+resource "aws_apigatewayv2_usage_plan_key" "default" {
+  key_id        = aws_apigatewayv2_api_key.default.id
+  usage_plan_id = aws_apigatewayv2_usage_plan.default.id
+}
+
+output "api_key_value" {
+  value     = aws_apigatewayv2_api_key.default.value
+  sensitive = true
 }
