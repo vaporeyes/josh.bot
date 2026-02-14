@@ -75,3 +75,6 @@ logs/
 # OS files
 .DS_Store
 Thumbs.db
+
+# ignore the artifact
+terraform/function.zip
