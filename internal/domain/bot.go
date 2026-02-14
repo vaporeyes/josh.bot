@@ -9,7 +9,15 @@ type Status struct {
 	Status          string `json:"status"`
 }
 
+// Project represents a software project or effort.
+type Project struct {
+	Name        string `json:"name"`
+	Stack       string `json:"stack"`
+	Description string `json:"description"`
+}
+
 // BotService is the interface that defines the operations for the bot.
 type BotService interface {
 	GetStatus() (Status, error)
+	GetProjects() ([]Project, error)
 }

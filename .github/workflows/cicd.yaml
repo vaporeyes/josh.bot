@@ -19,12 +19,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.24"
 
       - name: Build Go Binary
         run: |
           # Use GOOS=linux and GOARCH=arm64 for AWS Lambda (AL2023)
-          GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap cmd/api/main.go
+          GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap cmd/lambda/main.go
           zip terraform/function.zip bootstrap
 
       # 2. Authenticate with AWS via OIDC

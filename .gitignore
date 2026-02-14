@@ -26,6 +26,12 @@ venv/
 ENV/
 env/
 
+# Go binaries and test artifacts
+bootstrap
+*.test
+*.out
+go.work
+
 # IDE
 .idea/
 .vscode/

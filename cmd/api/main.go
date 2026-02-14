@@ -1,5 +1,5 @@
-// ABOUTME: This file is the main entrypoint for the josh.bot API server.
-// ABOUTME: It initializes dependencies and starts the HTTP server.
+// ABOUTME: This file is the main entrypoint for the josh.bot local development server.
+// ABOUTME: It initializes dependencies and starts the HTTP server without API key auth.
 package main
 
 import (
@@ -20,6 +20,7 @@ func main() {
 	// Register the handlers
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/status", adapter.StatusHandler)
+	mux.HandleFunc("/v1/projects", adapter.ProjectsHandler)
 
 	// Start the server
 	log.Println("Starting server on :8080")

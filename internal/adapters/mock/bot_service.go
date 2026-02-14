@@ -15,8 +15,16 @@ func NewBotService() *BotService {
 // GetStatus returns a hardcoded status for testing.
 func (s *BotService) GetStatus() (domain.Status, error) {
 	return domain.Status{
-		CurrentActivity: "Architecting josh.bot",
+		CurrentActivity: "Refining Go backends for josh.bot",
 		Location:        "Clarksville, TN",
 		Status:          "ok",
+	}, nil
+}
+
+// GetProjects returns a hardcoded list of projects.
+func (s *BotService) GetProjects() ([]domain.Project, error) {
+	return []domain.Project{
+		{Name: "Modular AWS Backend", Stack: "Go, AWS", Description: "Read-only S3/DynamoDB access."},
+		{Name: "Modernist Cookbot", Stack: "Python, Anthropic", Description: "AI sous-chef for sous-vide."},
 	}, nil
 }
