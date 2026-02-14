@@ -34,6 +34,11 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      - name: Build Go Binary
+        run: |
+          GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap cmd/lambda/main.go
+          zip terraform/function.zip bootstrap
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
