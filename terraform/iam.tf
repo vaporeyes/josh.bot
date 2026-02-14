@@ -50,7 +50,7 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
 }
 
 resource "aws_iam_role" "github_actions" {
-  name               = "josh-bot-github-actions-role"
+  name               = "GithubOIDCAdmin"
   assume_role_policy = data.aws_iam_policy_document.github_actions_assume_role.json
 }
 
