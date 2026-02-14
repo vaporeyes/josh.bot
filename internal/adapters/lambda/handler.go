@@ -21,12 +21,19 @@ func NewAdapter(service domain.BotService) *Adapter {
 	return &Adapter{service: service}
 }
 
+// isPublicRoute returns true for routes that don't require API key auth.
+func isPublicRoute(method, path string) bool {
+	return method == "GET" && path == "/v1/status"
+}
+
 // Router handles API Gateway proxy requests with API key validation.
 func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	// Validate API key from x-api-key header
-	expectedKey := os.Getenv("API_KEY")
-	if expectedKey != "" && req.Headers["x-api-key"] != expectedKey {
-		return jsonResponse(401, `{"error":"unauthorized"}`), nil
+	// Validate API key from x-api-key header (skip for public routes)
+	if !isPublicRoute(req.HTTPMethod, req.Path) {
+		expectedKey := os.Getenv("API_KEY")
+		if expectedKey != "" && req.Headers["x-api-key"] != expectedKey {
+			return jsonResponse(401, `{"error":"unauthorized"}`), nil
+		}
 	}
 
 	switch {

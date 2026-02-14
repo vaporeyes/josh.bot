@@ -31,14 +31,15 @@ func TestRouter_ValidAPIKey(t *testing.T) {
 	}
 }
 
-func TestRouter_InvalidAPIKey(t *testing.T) {
+func TestRouter_InvalidAPIKey_ProtectedRoute(t *testing.T) {
 	t.Setenv("API_KEY", "test-secret-key")
 
 	adapter := NewAdapter(mock.NewBotService())
 	req := events.APIGatewayProxyRequest{
-		HTTPMethod: "GET",
+		HTTPMethod: "PUT",
 		Path:       "/v1/status",
 		Headers:    map[string]string{"x-api-key": "wrong-key"},
+		Body:       `{"status":"busy"}`,
 	}
 
 	resp, err := adapter.Router(req)
@@ -50,7 +51,27 @@ func TestRouter_InvalidAPIKey(t *testing.T) {
 	}
 }
 
-func TestRouter_MissingAPIKey(t *testing.T) {
+func TestRouter_MissingAPIKey_ProtectedRoute(t *testing.T) {
+	t.Setenv("API_KEY", "test-secret-key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "PUT",
+		Path:       "/v1/status",
+		Headers:    map[string]string{},
+		Body:       `{"status":"busy"}`,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 401 {
+		t.Errorf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestRouter_GetStatus_NoAPIKey_PublicRoute(t *testing.T) {
 	t.Setenv("API_KEY", "test-secret-key")
 
 	adapter := NewAdapter(mock.NewBotService())
@@ -64,8 +85,8 @@ func TestRouter_MissingAPIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resp.StatusCode != 401 {
-		t.Errorf("expected 401, got %d", resp.StatusCode)
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200 for public GET /v1/status, got %d", resp.StatusCode)
 	}
 }
 
