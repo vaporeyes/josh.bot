@@ -30,6 +30,11 @@ func (s *BotService) GetStatus() (domain.Status, error) {
 	}, nil
 }
 
+// UpdateStatus is a no-op in the mock adapter.
+func (s *BotService) UpdateStatus(fields map[string]any) error {
+	return nil
+}
+
 // GetProjects returns a hardcoded list of projects.
 func (s *BotService) GetProjects() ([]domain.Project, error) {
 	return []domain.Project{

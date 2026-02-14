@@ -33,6 +33,7 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
       {
         Action = [
           "dynamodb:GetItem",
+          "dynamodb:UpdateItem",
         ]
         Effect   = "Allow"
         Resource = aws_dynamodb_table.josh_bot_data.arn

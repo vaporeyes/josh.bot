@@ -29,6 +29,23 @@ func (a *Adapter) StatusHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(status)
 }
 
+func (a *Adapter) UpdateStatusHandler(w http.ResponseWriter, r *http.Request) {
+	var fields map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.UpdateStatus(fields); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"ok":true}`))
+}
+
 func (a *Adapter) ProjectsHandler(w http.ResponseWriter, r *http.Request) {
 	projects, err := a.service.GetProjects()
 	if err != nil {

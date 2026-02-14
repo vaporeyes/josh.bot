@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jduncan/josh-bot/internal/adapters/mock"
@@ -66,6 +67,53 @@ func TestStatusHandler(t *testing.T) {
 	}
 	if len(status.Interests) == 0 {
 		t.Error("expected interests to be non-empty")
+	}
+}
+
+func TestUpdateStatusHandler(t *testing.T) {
+	mockService := mock.NewBotService()
+	adapter := NewAdapter(mockService)
+
+	body := strings.NewReader(`{"current_activity": "Testing", "availability": "Busy"}`)
+	req, err := http.NewRequest("PUT", "/v1/status", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(adapter.UpdateStatusHandler)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if result["ok"] != true {
+		t.Errorf("expected ok:true, got %v", result)
+	}
+}
+
+func TestUpdateStatusHandler_InvalidJSON(t *testing.T) {
+	mockService := mock.NewBotService()
+	adapter := NewAdapter(mockService)
+
+	body := strings.NewReader(`{not valid`)
+	req, err := http.NewRequest("PUT", "/v1/status", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(adapter.UpdateStatusHandler)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
 	}
 }
 

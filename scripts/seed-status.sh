@@ -7,8 +7,8 @@ set -euo pipefail
 TABLE_NAME="${1:-josh-bot-data}"
 
 aws dynamodb put-item \
-  --table-name "$TABLE_NAME" \
-  --item '{
+	--table-name "$TABLE_NAME" \
+	--item '{
     "id": {"S": "status"},
     "name": {"S": "Josh Duncan"},
     "title": {"S": "Platform Engineer"},
@@ -21,12 +21,16 @@ aws dynamodb put-item \
       "github": {"S": "https://github.com/vaporeyes"},
       "linkedin": {"S": "https://www.linkedin.com/in/josh-duncan-919138175/"}
     }},
+    "updated_at": {"S": "2026-02-14T00:00:00Z"},
     "interests": {"L": [
+	  {"S": "Python"},
       {"S": "Go"},
       {"S": "AWS"},
       {"S": "Sous vide"},
       {"S": "Powerlifting"},
-      {"S": "Art Nouveau"}
+      {"S": "Art Nouveau"},
+	  {"S": "Synthwave"},
+	  {"S": "Cyberpunk"}
     ]}
   }'
 

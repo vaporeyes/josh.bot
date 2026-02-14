@@ -17,8 +17,9 @@ func TestRouter_ValidAPIKey(t *testing.T) {
 
 	adapter := NewAdapter(mock.NewBotService())
 	req := events.APIGatewayProxyRequest{
-		Path:    "/v1/status",
-		Headers: map[string]string{"x-api-key": "test-secret-key"},
+		HTTPMethod: "GET",
+		Path:       "/v1/status",
+		Headers:    map[string]string{"x-api-key": "test-secret-key"},
 	}
 
 	resp, err := adapter.Router(req)
@@ -35,8 +36,9 @@ func TestRouter_InvalidAPIKey(t *testing.T) {
 
 	adapter := NewAdapter(mock.NewBotService())
 	req := events.APIGatewayProxyRequest{
-		Path:    "/v1/status",
-		Headers: map[string]string{"x-api-key": "wrong-key"},
+		HTTPMethod: "GET",
+		Path:       "/v1/status",
+		Headers:    map[string]string{"x-api-key": "wrong-key"},
 	}
 
 	resp, err := adapter.Router(req)
@@ -53,8 +55,9 @@ func TestRouter_MissingAPIKey(t *testing.T) {
 
 	adapter := NewAdapter(mock.NewBotService())
 	req := events.APIGatewayProxyRequest{
-		Path:    "/v1/status",
-		Headers: map[string]string{},
+		HTTPMethod: "GET",
+		Path:       "/v1/status",
+		Headers:    map[string]string{},
 	}
 
 	resp, err := adapter.Router(req)
@@ -71,8 +74,9 @@ func TestRouter_NoAPIKeyConfigured(t *testing.T) {
 
 	adapter := NewAdapter(mock.NewBotService())
 	req := events.APIGatewayProxyRequest{
-		Path:    "/v1/status",
-		Headers: map[string]string{},
+		HTTPMethod: "GET",
+		Path:       "/v1/status",
+		Headers:    map[string]string{},
 	}
 
 	resp, err := adapter.Router(req)
@@ -89,8 +93,9 @@ func TestRouter_StatusEndpoint(t *testing.T) {
 
 	adapter := NewAdapter(mock.NewBotService())
 	req := events.APIGatewayProxyRequest{
-		Path:    "/v1/status",
-		Headers: map[string]string{"x-api-key": "key"},
+		HTTPMethod: "GET",
+		Path:       "/v1/status",
+		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
 	resp, err := adapter.Router(req)
@@ -125,8 +130,9 @@ func TestRouter_ProjectsEndpoint(t *testing.T) {
 
 	adapter := NewAdapter(mock.NewBotService())
 	req := events.APIGatewayProxyRequest{
-		Path:    "/v1/projects",
-		Headers: map[string]string{"x-api-key": "key"},
+		HTTPMethod: "GET",
+		Path:       "/v1/projects",
+		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
 	resp, err := adapter.Router(req)
@@ -141,13 +147,93 @@ func TestRouter_ProjectsEndpoint(t *testing.T) {
 	}
 }
 
+func TestRouter_PutStatus_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "PUT",
+		Path:       "/v1/status",
+		Headers:    map[string]string{"x-api-key": "key"},
+		Body:       `{"current_activity": "Deploying josh.bot", "availability": "Heads down"}`,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestRouter_PutStatus_InvalidJSON(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "PUT",
+		Path:       "/v1/status",
+		Headers:    map[string]string{"x-api-key": "key"},
+		Body:       `{not valid json`,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 400 {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestRouter_PostStatus_MethodNotAllowed(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/status",
+		Headers:    map[string]string{"x-api-key": "key"},
+		Body:       `{"status": "busy"}`,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 405 {
+		t.Errorf("expected 405, got %d", resp.StatusCode)
+	}
+}
+
+func TestRouter_PutProjects_MethodNotAllowed(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "PUT",
+		Path:       "/v1/projects",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 405 {
+		t.Errorf("expected 405, got %d", resp.StatusCode)
+	}
+}
+
 func TestRouter_NotFound(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
 	adapter := NewAdapter(mock.NewBotService())
 	req := events.APIGatewayProxyRequest{
-		Path:    "/v1/unknown",
-		Headers: map[string]string{"x-api-key": "key"},
+		HTTPMethod: "GET",
+		Path:       "/v1/unknown",
+		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
 	resp, err := adapter.Router(req)
