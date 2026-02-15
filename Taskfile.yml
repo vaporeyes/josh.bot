@@ -102,9 +102,14 @@ tasks:
     cmds:
       - ./scripts/seed-projects.sh
 
+  seed:links:
+    desc: Seed the DynamoDB table with initial link/bookmark data
+    cmds:
+      - ./scripts/seed-links.sh
+
   seed:
     desc: Seed all data into DynamoDB
-    deps: [seed:status, seed:projects]
+    deps: [seed:status, seed:projects, seed:links]
 
   check:
     desc: Run all checks (fmt, vet, lint, test)
