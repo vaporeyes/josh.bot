@@ -60,6 +60,11 @@ func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayPr
 	case strings.HasPrefix(req.Path, "/v1/links/"):
 		id := strings.TrimPrefix(req.Path, "/v1/links/")
 		return a.handleLink(req, id)
+	case req.Path == "/v1/notes":
+		return a.handleNotes(req)
+	case strings.HasPrefix(req.Path, "/v1/notes/"):
+		id := strings.TrimPrefix(req.Path, "/v1/notes/")
+		return a.handleNote(req, id)
 	default:
 		return jsonResponse(404, `{"error":"not found"}`), nil
 	}
@@ -231,6 +236,71 @@ func (a *Adapter) handleLink(req events.APIGatewayProxyRequest, id string) (even
 
 	case "DELETE":
 		if err := a.service.DeleteLink(id); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+}
+
+// handleNotes routes GET (list) and POST (create) for /v1/notes.
+func (a *Adapter) handleNotes(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		tag := req.QueryStringParameters["tag"]
+		notes, err := a.service.GetNotes(tag)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		body, err := json.Marshal(notes)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "POST":
+		var note domain.Note
+		if err := json.Unmarshal([]byte(req.Body), &note); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.service.CreateNote(note); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(201, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+}
+
+// handleNote routes GET, PUT, DELETE for /v1/notes/{id}.
+func (a *Adapter) handleNote(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		note, err := a.service.GetNote(id)
+		if err != nil {
+			return jsonResponse(404, `{"error":"note not found"}`), nil
+		}
+		body, err := json.Marshal(note)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "PUT":
+		var fields map[string]any
+		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.service.UpdateNote(id, fields); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	case "DELETE":
+		if err := a.service.DeleteNote(id); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil

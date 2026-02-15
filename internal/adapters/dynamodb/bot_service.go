@@ -310,6 +310,121 @@ func (s *BotService) DeleteLink(id string) error {
 	return nil
 }
 
+// allowedNoteFields defines which note fields can be updated via PUT.
+var allowedNoteFields = map[string]bool{
+	"title": true, "body": true, "tags": true,
+}
+
+// --- Note Operations ---
+
+// GetNotes fetches all notes from DynamoDB, optionally filtered by tag.
+func (s *BotService) GetNotes(tag string) ([]domain.Note, error) {
+	filterExpr := "begins_with(id, :prefix)"
+	exprValues := map[string]types.AttributeValue{
+		":prefix": &types.AttributeValueMemberS{Value: "note#"},
+	}
+
+	if tag != "" {
+		filterExpr += " AND contains(tags, :tag)"
+		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
+	}
+
+	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+		TableName:                 &s.tableName,
+		FilterExpression:          &filterExpr,
+		ExpressionAttributeValues: exprValues,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("dynamodb Scan: %w", err)
+	}
+
+	notes := make([]domain.Note, 0, len(output.Items))
+	for _, item := range output.Items {
+		var n domain.Note
+		if err := attributevalue.UnmarshalMap(item, &n); err != nil {
+			return nil, fmt.Errorf("unmarshal note: %w", err)
+		}
+		notes = append(notes, n)
+	}
+
+	return notes, nil
+}
+
+// GetNote fetches a single note by ID from DynamoDB.
+func (s *BotService) GetNote(id string) (domain.Note, error) {
+	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: "note#" + id},
+		},
+	})
+	if err != nil {
+		return domain.Note{}, fmt.Errorf("dynamodb GetItem: %w", err)
+	}
+	if output.Item == nil {
+		return domain.Note{}, fmt.Errorf("note %q not found", id)
+	}
+
+	var note domain.Note
+	if err := attributevalue.UnmarshalMap(output.Item, &note); err != nil {
+		return domain.Note{}, fmt.Errorf("unmarshal note: %w", err)
+	}
+
+	return note, nil
+}
+
+// CreateNote adds a new note to DynamoDB with a generated random ID.
+func (s *BotService) CreateNote(note domain.Note) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	note.ID = domain.NoteID()
+	note.CreatedAt = now
+	note.UpdatedAt = now
+
+	item, err := attributevalue.MarshalMap(note)
+	if err != nil {
+		return fmt.Errorf("marshal note: %w", err)
+	}
+
+	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+		TableName: &s.tableName,
+		Item:      item,
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb PutItem: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateNote updates specific fields on a note in DynamoDB.
+func (s *BotService) UpdateNote(id string, fields map[string]any) error {
+	if len(fields) == 0 {
+		return fmt.Errorf("no fields provided for update")
+	}
+
+	for key := range fields {
+		if !allowedNoteFields[key] {
+			return fmt.Errorf("field %q is not an updatable note field", key)
+		}
+	}
+
+	return s.updateItem("note#"+id, fields)
+}
+
+// DeleteNote removes a note from DynamoDB.
+func (s *BotService) DeleteNote(id string) error {
+	_, err := s.client.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: "note#" + id},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb DeleteItem: %w", err)
+	}
+	return nil
+}
+
 // --- Shared Helpers ---
 
 // updateItem builds and executes a DynamoDB UpdateItem with SET expression.

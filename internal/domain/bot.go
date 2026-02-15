@@ -3,6 +3,7 @@
 package domain
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -50,6 +51,24 @@ type Link struct {
 func LinkIDFromURL(rawURL string) string {
 	h := sha256.Sum256([]byte(rawURL))
 	return hex.EncodeToString(h[:6])
+}
+
+// Note represents a captured text note for later consumption.
+type Note struct {
+	ID        string   `json:"id" dynamodbav:"id"`
+	Title     string   `json:"title" dynamodbav:"title"`
+	Body      string   `json:"body" dynamodbav:"body"`
+	Tags      []string `json:"tags" dynamodbav:"tags"`
+	CreatedAt string   `json:"created_at" dynamodbav:"created_at"`
+	UpdatedAt string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
+}
+
+// NoteID generates a random ID with a "note#" prefix.
+// AIDEV-NOTE: Random IDs (not deterministic) since notes have no natural dedup key.
+func NoteID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return "note#" + hex.EncodeToString(b)
 }
 
 // Lift represents a single set within a workout.
@@ -107,4 +126,9 @@ type BotService interface {
 	CreateLink(link Link) error
 	UpdateLink(id string, fields map[string]any) error
 	DeleteLink(id string) error
+	GetNotes(tag string) ([]Note, error)
+	GetNote(id string) (Note, error)
+	CreateNote(note Note) error
+	UpdateNote(id string, fields map[string]any) error
+	DeleteNote(id string) error
 }

@@ -1,8 +1,9 @@
 // ABOUTME: This file contains tests for domain helper functions.
-// ABOUTME: Tests ExerciseSlug, CompactDate, and Lift ID generation.
+// ABOUTME: Tests ExerciseSlug, CompactDate, Lift ID generation, and Note ID generation.
 package domain
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -179,5 +180,24 @@ func TestLiftID_Unique(t *testing.T) {
 	f := LiftID("2022-06-11 04:20:50", "Squat (Barbell)", "1")
 	if e == f {
 		t.Error("Different dates should produce different IDs")
+	}
+}
+
+func TestNoteID_Format(t *testing.T) {
+	id := NoteID()
+	if !strings.HasPrefix(id, "note#") {
+		t.Errorf("NoteID should start with 'note#', got %q", id)
+	}
+	// "note#" (5 chars) + 16 hex chars (8 bytes) = 21 chars total
+	if len(id) != 21 {
+		t.Errorf("NoteID length should be 21, got %d for %q", len(id), id)
+	}
+}
+
+func TestNoteID_Unique(t *testing.T) {
+	a := NoteID()
+	b := NoteID()
+	if a == b {
+		t.Errorf("two NoteID calls should produce different IDs: %q == %q", a, b)
 	}
 }

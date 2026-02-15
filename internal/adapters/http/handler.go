@@ -218,6 +218,85 @@ func (a *Adapter) DeleteLinkHandler(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, http.StatusOK)
 }
 
+func (a *Adapter) NotesHandler(w http.ResponseWriter, r *http.Request) {
+	tag := r.URL.Query().Get("tag")
+	notes, err := a.service.GetNotes(tag)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, notes)
+}
+
+func (a *Adapter) CreateNoteHandler(w http.ResponseWriter, r *http.Request) {
+	var note domain.Note
+	if err := json.NewDecoder(r.Body).Decode(&note); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.CreateNote(note); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusCreated)
+}
+
+// NoteHandler handles GET /v1/notes/{id}.
+func (a *Adapter) NoteHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/notes/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	note, err := a.service.GetNote(id)
+	if err != nil {
+		http.Error(w, `{"error":"note not found"}`, http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, note)
+}
+
+func (a *Adapter) UpdateNoteHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/notes/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var fields map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.UpdateNote(id, fields); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
+func (a *Adapter) DeleteNoteHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/notes/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.DeleteNote(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
 // writeJSON encodes val as JSON and writes it to the response.
 func writeJSON(w http.ResponseWriter, statusCode int, val any) {
 	w.Header().Set("Content-Type", "application/json")

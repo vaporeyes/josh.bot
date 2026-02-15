@@ -121,6 +121,53 @@ func (s *BotService) DeleteLink(id string) error {
 	return nil
 }
 
+// GetNotes returns hardcoded notes, optionally filtered by tag.
+func (s *BotService) GetNotes(tag string) ([]domain.Note, error) {
+	notes := []domain.Note{
+		{ID: "note#abc123", Title: "Meeting notes", Body: "Discussed API design", Tags: []string{"work"}},
+		{ID: "note#def456", Title: "Grocery list", Body: "Eggs, milk, bread", Tags: []string{"personal"}},
+	}
+	if tag == "" {
+		return notes, nil
+	}
+	var filtered []domain.Note
+	for _, n := range notes {
+		for _, t := range n.Tags {
+			if t == tag {
+				filtered = append(filtered, n)
+				break
+			}
+		}
+	}
+	return filtered, nil
+}
+
+// GetNote returns a hardcoded note by ID.
+func (s *BotService) GetNote(id string) (domain.Note, error) {
+	notes, _ := s.GetNotes("")
+	for _, n := range notes {
+		if n.ID == id {
+			return n, nil
+		}
+	}
+	return domain.Note{}, fmt.Errorf("note %q not found", id)
+}
+
+// CreateNote is a no-op in the mock adapter.
+func (s *BotService) CreateNote(note domain.Note) error {
+	return nil
+}
+
+// UpdateNote is a no-op in the mock adapter.
+func (s *BotService) UpdateNote(id string, fields map[string]any) error {
+	return nil
+}
+
+// DeleteNote is a no-op in the mock adapter.
+func (s *BotService) DeleteNote(id string) error {
+	return nil
+}
+
 // MetricsService is a mock implementation of domain.MetricsService.
 type MetricsService struct{}
 

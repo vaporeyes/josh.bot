@@ -589,3 +589,202 @@ func TestDeleteLink_DynamoDBError(t *testing.T) {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
 }
+
+// --- Note Tests ---
+
+func TestGetNotes_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		scanOutput: &dynamodb.ScanOutput{
+			Items: []map[string]types.AttributeValue{
+				{
+					"id":    &types.AttributeValueMemberS{Value: "note#abc123"},
+					"title": &types.AttributeValueMemberS{Value: "Meeting notes"},
+					"body":  &types.AttributeValueMemberS{Value: "Discussed API design"},
+					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+						&types.AttributeValueMemberS{Value: "work"},
+					}},
+				},
+				{
+					"id":    &types.AttributeValueMemberS{Value: "note#def456"},
+					"title": &types.AttributeValueMemberS{Value: "Grocery list"},
+					"body":  &types.AttributeValueMemberS{Value: "Eggs, milk, bread"},
+					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+						&types.AttributeValueMemberS{Value: "personal"},
+					}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	notes, err := svc.GetNotes("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(notes) != 2 {
+		t.Fatalf("expected 2 notes, got %d", len(notes))
+	}
+	if notes[0].Title != "Meeting notes" {
+		t.Errorf("expected title 'Meeting notes', got '%s'", notes[0].Title)
+	}
+}
+
+func TestGetNotes_FilterByTag(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		scanOutput: &dynamodb.ScanOutput{
+			Items: []map[string]types.AttributeValue{
+				{
+					"id":    &types.AttributeValueMemberS{Value: "note#abc123"},
+					"title": &types.AttributeValueMemberS{Value: "Meeting notes"},
+					"body":  &types.AttributeValueMemberS{Value: "Discussed API design"},
+					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+						&types.AttributeValueMemberS{Value: "work"},
+					}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	notes, err := svc.GetNotes("work")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(notes) != 1 {
+		t.Fatalf("expected 1 note, got %d", len(notes))
+	}
+	if mock.scanInput == nil {
+		t.Fatal("expected Scan to be called")
+	}
+	filterExpr := *mock.scanInput.FilterExpression
+	if !strings.Contains(filterExpr, "contains") {
+		t.Errorf("expected filter expression to contain 'contains', got '%s'", filterExpr)
+	}
+}
+
+func TestGetNote_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"id":    &types.AttributeValueMemberS{Value: "note#abc123"},
+				"title": &types.AttributeValueMemberS{Value: "Meeting notes"},
+				"body":  &types.AttributeValueMemberS{Value: "Discussed API design"},
+				"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+					&types.AttributeValueMemberS{Value: "work"},
+				}},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	note, err := svc.GetNote("abc123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if note.Title != "Meeting notes" {
+		t.Errorf("expected title 'Meeting notes', got '%s'", note.Title)
+	}
+	if note.Body != "Discussed API design" {
+		t.Errorf("expected body 'Discussed API design', got '%s'", note.Body)
+	}
+}
+
+func TestGetNote_NotFound(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{Item: nil},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetNote("nonexistent")
+	if err == nil {
+		t.Error("expected error for missing note, got nil")
+	}
+}
+
+func TestCreateNote_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.CreateNote(domain.Note{
+		Title: "Meeting notes",
+		Body:  "Discussed API design",
+		Tags:  []string{"work"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.putInput == nil {
+		t.Fatal("expected PutItem to be called")
+	}
+	idAttr, ok := mock.putInput.Item["id"]
+	if !ok {
+		t.Fatal("expected 'id' in put item")
+	}
+	idVal := idAttr.(*types.AttributeValueMemberS).Value
+	if !strings.HasPrefix(idVal, "note#") {
+		t.Errorf("expected id to start with 'note#', got '%s'", idVal)
+	}
+}
+
+func TestCreateNote_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.CreateNote(domain.Note{Title: "Test", Body: "body"})
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+func TestUpdateNote_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateNote("abc123", map[string]any{
+		"title": "Updated Title",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.updateInput == nil {
+		t.Fatal("expected UpdateItem to be called")
+	}
+	idAttr := mock.updateInput.Key["id"]
+	if idAttr.(*types.AttributeValueMemberS).Value != "note#abc123" {
+		t.Errorf("expected key 'note#abc123', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+}
+
+func TestUpdateNote_InvalidField(t *testing.T) {
+	mock := &mockDynamoDBClient{}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateNote("test", map[string]any{"hacker": "nope"})
+	if err == nil {
+		t.Error("expected error for invalid field, got nil")
+	}
+}
+
+func TestDeleteNote_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.DeleteNote("abc123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.deleteInput == nil {
+		t.Fatal("expected DeleteItem to be called")
+	}
+	idAttr := mock.deleteInput.Key["id"]
+	if idAttr.(*types.AttributeValueMemberS).Value != "note#abc123" {
+		t.Errorf("expected key 'note#abc123', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+}
+
+func TestDeleteNote_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.DeleteNote("test")
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
