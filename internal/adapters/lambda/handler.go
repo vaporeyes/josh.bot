@@ -15,11 +15,12 @@ import (
 type Adapter struct {
 	service        domain.BotService
 	metricsService domain.MetricsService
+	memService     domain.MemService
 }
 
 // NewAdapter creates a new Lambda adapter for the given services.
-func NewAdapter(service domain.BotService, metricsService domain.MetricsService) *Adapter {
-	return &Adapter{service: service, metricsService: metricsService}
+func NewAdapter(service domain.BotService, metricsService domain.MetricsService, memService domain.MemService) *Adapter {
+	return &Adapter{service: service, metricsService: metricsService, memService: memService}
 }
 
 // isPublicRoute returns true for routes that don't require API key auth.
@@ -75,6 +76,23 @@ func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayPr
 	case strings.HasPrefix(req.Path, "/v1/log/"):
 		id := strings.TrimPrefix(req.Path, "/v1/log/")
 		return a.handleLogEntry(req, id)
+	case req.Path == "/v1/mem/observations":
+		return a.handleMemObservations(req)
+	case strings.HasPrefix(req.Path, "/v1/mem/observations/"):
+		id := strings.TrimPrefix(req.Path, "/v1/mem/observations/")
+		return a.handleMemObservation(req, id)
+	case req.Path == "/v1/mem/summaries":
+		return a.handleMemSummaries(req)
+	case strings.HasPrefix(req.Path, "/v1/mem/summaries/"):
+		id := strings.TrimPrefix(req.Path, "/v1/mem/summaries/")
+		return a.handleMemSummary(req, id)
+	case req.Path == "/v1/mem/prompts":
+		return a.handleMemPrompts(req)
+	case strings.HasPrefix(req.Path, "/v1/mem/prompts/"):
+		id := strings.TrimPrefix(req.Path, "/v1/mem/prompts/")
+		return a.handleMemPrompt(req, id)
+	case req.Path == "/v1/mem/stats":
+		return a.handleMemStats(req)
 	default:
 		return jsonResponse(404, `{"error":"not found"}`), nil
 	}
@@ -448,6 +466,121 @@ func (a *Adapter) handleLogEntry(req events.APIGatewayProxyRequest, id string) (
 	default:
 		return jsonResponse(405, `{"error":"method not allowed"}`), nil
 	}
+}
+
+// handleMemObservations handles GET /v1/mem/observations.
+func (a *Adapter) handleMemObservations(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if req.HTTPMethod != "GET" {
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+	obsType := req.QueryStringParameters["type"]
+	project := req.QueryStringParameters["project"]
+	observations, err := a.memService.GetObservations(obsType, project)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	body, err := json.Marshal(observations)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	return jsonResponse(200, string(body)), nil
+}
+
+// handleMemObservation handles GET /v1/mem/observations/{id}.
+func (a *Adapter) handleMemObservation(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+	if req.HTTPMethod != "GET" {
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+	obs, err := a.memService.GetObservation(id)
+	if err != nil {
+		return jsonResponse(404, `{"error":"observation not found"}`), nil
+	}
+	body, err := json.Marshal(obs)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	return jsonResponse(200, string(body)), nil
+}
+
+// handleMemSummaries handles GET /v1/mem/summaries.
+func (a *Adapter) handleMemSummaries(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if req.HTTPMethod != "GET" {
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+	project := req.QueryStringParameters["project"]
+	summaries, err := a.memService.GetSummaries(project)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	body, err := json.Marshal(summaries)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	return jsonResponse(200, string(body)), nil
+}
+
+// handleMemSummary handles GET /v1/mem/summaries/{id}.
+func (a *Adapter) handleMemSummary(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+	if req.HTTPMethod != "GET" {
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+	summary, err := a.memService.GetSummary(id)
+	if err != nil {
+		return jsonResponse(404, `{"error":"summary not found"}`), nil
+	}
+	body, err := json.Marshal(summary)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	return jsonResponse(200, string(body)), nil
+}
+
+// handleMemPrompts handles GET /v1/mem/prompts.
+func (a *Adapter) handleMemPrompts(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if req.HTTPMethod != "GET" {
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+	prompts, err := a.memService.GetPrompts()
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	body, err := json.Marshal(prompts)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	return jsonResponse(200, string(body)), nil
+}
+
+// handleMemPrompt handles GET /v1/mem/prompts/{id}.
+func (a *Adapter) handleMemPrompt(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+	if req.HTTPMethod != "GET" {
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+	prompt, err := a.memService.GetPrompt(id)
+	if err != nil {
+		return jsonResponse(404, `{"error":"prompt not found"}`), nil
+	}
+	body, err := json.Marshal(prompt)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	return jsonResponse(200, string(body)), nil
+}
+
+// handleMemStats handles GET /v1/mem/stats.
+func (a *Adapter) handleMemStats(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if req.HTTPMethod != "GET" {
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+	stats, err := a.memService.GetStats()
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	body, err := json.Marshal(stats)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	return jsonResponse(200, string(body)), nil
 }
 
 func jsonResponse(statusCode int, body string) events.APIGatewayProxyResponse {

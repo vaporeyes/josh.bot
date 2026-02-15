@@ -14,9 +14,10 @@ func main() {
 	// Initialize the services
 	service := mock.NewBotService()
 	metricsService := mock.NewMetricsService()
+	memService := mock.NewMemService()
 
 	// Initialize the HTTP adapter
-	adapter := httpadapter.NewAdapter(service, metricsService)
+	adapter := httpadapter.NewAdapter(service, metricsService, memService)
 
 	// Register the handlers
 	mux := http.NewServeMux()
@@ -26,6 +27,13 @@ func main() {
 	mux.HandleFunc("/v1/notes", adapter.NotesHandler)
 	mux.HandleFunc("/v1/til", adapter.TILsHandler)
 	mux.HandleFunc("/v1/log", adapter.LogEntriesHandler)
+	mux.HandleFunc("/v1/mem/observations", adapter.MemObservationsHandler)
+	mux.HandleFunc("/v1/mem/observations/", adapter.MemObservationHandler)
+	mux.HandleFunc("/v1/mem/summaries", adapter.MemSummariesHandler)
+	mux.HandleFunc("/v1/mem/summaries/", adapter.MemSummaryHandler)
+	mux.HandleFunc("/v1/mem/prompts", adapter.MemPromptsHandler)
+	mux.HandleFunc("/v1/mem/prompts/", adapter.MemPromptHandler)
+	mux.HandleFunc("/v1/mem/stats", adapter.MemStatsHandler)
 
 	// Start the server
 	log.Println("Starting server on :8080")

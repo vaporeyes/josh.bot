@@ -272,6 +272,21 @@ func NewMetricsService() *MetricsService {
 
 // GetMetrics returns hardcoded metrics for testing.
 func (s *MetricsService) GetMetrics() (domain.MetricsResponse, error) {
+	devStats := &domain.MemStats{
+		TotalObservations: 150,
+		TotalSummaries:    30,
+		TotalPrompts:      75,
+		ByType: map[string]int{
+			"decision": 45,
+			"feature":  60,
+			"bugfix":   25,
+			"change":   20,
+		},
+		ByProject: map[string]int{
+			"josh.bot": 120,
+			"other":    30,
+		},
+	}
 	return domain.MetricsResponse{
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Human: domain.HumanMetrics{
@@ -290,5 +305,6 @@ func (s *MetricsService) GetMetrics() (domain.MetricsResponse, error) {
 				TonnageLbs: 12500,
 			},
 		},
+		Dev: devStats,
 	}, nil
 }

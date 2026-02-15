@@ -28,6 +28,7 @@ type HumanMetrics struct {
 type MetricsResponse struct {
 	Timestamp string       `json:"timestamp"`
 	Human     HumanMetrics `json:"human"`
+	Dev       *MemStats    `json:"dev,omitempty"`
 }
 
 // MetricsService computes and returns the metrics dashboard.

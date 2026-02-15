@@ -15,7 +15,7 @@ import (
 
 func TestStatusHandler(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	req, err := http.NewRequest("GET", "/v1/status", nil)
 	if err != nil {
@@ -72,7 +72,7 @@ func TestStatusHandler(t *testing.T) {
 
 func TestUpdateStatusHandler(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	body := strings.NewReader(`{"current_activity": "Testing", "availability": "Busy"}`)
 	req, err := http.NewRequest("PUT", "/v1/status", body)
@@ -100,7 +100,7 @@ func TestUpdateStatusHandler(t *testing.T) {
 
 func TestUpdateStatusHandler_InvalidJSON(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	body := strings.NewReader(`{not valid`)
 	req, err := http.NewRequest("PUT", "/v1/status", body)
@@ -119,7 +119,7 @@ func TestUpdateStatusHandler_InvalidJSON(t *testing.T) {
 
 func TestProjectsHandler(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	req, err := http.NewRequest("GET", "/v1/projects", nil)
 	if err != nil {
@@ -146,7 +146,7 @@ func TestProjectsHandler(t *testing.T) {
 
 func TestCreateProjectHandler(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	body := strings.NewReader(`{"slug":"new-proj","name":"New Project","stack":"Go","description":"A thing","url":"https://github.com/vaporeyes/new","status":"active"}`)
 	req, err := http.NewRequest("POST", "/v1/projects", body)
@@ -166,7 +166,7 @@ func TestCreateProjectHandler(t *testing.T) {
 
 func TestCreateProjectHandler_InvalidJSON(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	body := strings.NewReader(`{bad json`)
 	req, err := http.NewRequest("POST", "/v1/projects", body)
@@ -185,7 +185,7 @@ func TestCreateProjectHandler_InvalidJSON(t *testing.T) {
 
 func TestProjectHandler(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	req, err := http.NewRequest("GET", "/v1/projects/modular-aws-backend", nil)
 	if err != nil {
@@ -211,7 +211,7 @@ func TestProjectHandler(t *testing.T) {
 
 func TestProjectHandler_NotFound(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	req, err := http.NewRequest("GET", "/v1/projects/nonexistent", nil)
 	if err != nil {
@@ -229,7 +229,7 @@ func TestProjectHandler_NotFound(t *testing.T) {
 
 func TestUpdateProjectHandler(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	body := strings.NewReader(`{"status":"archived"}`)
 	req, err := http.NewRequest("PUT", "/v1/projects/modular-aws-backend", body)
@@ -249,7 +249,7 @@ func TestUpdateProjectHandler(t *testing.T) {
 
 func TestDeleteProjectHandler(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	req, err := http.NewRequest("DELETE", "/v1/projects/modular-aws-backend", nil)
 	if err != nil {
@@ -267,7 +267,7 @@ func TestDeleteProjectHandler(t *testing.T) {
 
 func TestLinksHandler(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	req, err := http.NewRequest("GET", "/v1/links", nil)
 	if err != nil {
@@ -293,7 +293,7 @@ func TestLinksHandler(t *testing.T) {
 
 func TestLinksHandler_FilterByTag(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	req, err := http.NewRequest("GET", "/v1/links?tag=aws", nil)
 	if err != nil {
@@ -319,7 +319,7 @@ func TestLinksHandler_FilterByTag(t *testing.T) {
 
 func TestCreateLinkHandler(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	body := strings.NewReader(`{"url":"https://example.com","title":"Example","tags":["test"]}`)
 	req, err := http.NewRequest("POST", "/v1/links", body)
@@ -339,7 +339,7 @@ func TestCreateLinkHandler(t *testing.T) {
 
 func TestLinkHandler(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	req, err := http.NewRequest("GET", "/v1/links/a1b2c3d4e5f6", nil)
 	if err != nil {
@@ -365,7 +365,7 @@ func TestLinkHandler(t *testing.T) {
 
 func TestLinkHandler_NotFound(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	req, err := http.NewRequest("GET", "/v1/links/nonexistent", nil)
 	if err != nil {
@@ -383,7 +383,7 @@ func TestLinkHandler_NotFound(t *testing.T) {
 
 func TestUpdateLinkHandler(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	body := strings.NewReader(`{"title":"Updated Title"}`)
 	req, err := http.NewRequest("PUT", "/v1/links/a1b2c3d4e5f6", body)
@@ -403,7 +403,7 @@ func TestUpdateLinkHandler(t *testing.T) {
 
 func TestDeleteLinkHandler(t *testing.T) {
 	mockService := mock.NewBotService()
-	adapter := NewAdapter(mockService, mock.NewMetricsService())
+	adapter := NewAdapter(mockService, mock.NewMetricsService(), mock.NewMemService())
 
 	req, err := http.NewRequest("DELETE", "/v1/links/a1b2c3d4e5f6", nil)
 	if err != nil {

@@ -30,9 +30,15 @@ func main() {
 		log.Fatalf("unable to load AWS config: %v", err)
 	}
 
+	memTableName := os.Getenv("MEM_TABLE_NAME")
+	if memTableName == "" {
+		memTableName = "josh-bot-mem"
+	}
+
 	client := dynamodb.NewFromConfig(cfg)
 	service := dynamodbadapter.NewBotService(client, tableName)
-	metricsService := dynamodbadapter.NewMetricsService(client, liftsTableName, tableName)
-	adapter := lambdaadapter.NewAdapter(service, metricsService)
+	memService := dynamodbadapter.NewMemService(client, memTableName)
+	metricsService := dynamodbadapter.NewMetricsService(client, liftsTableName, tableName, memService)
+	adapter := lambdaadapter.NewAdapter(service, metricsService, memService)
 	lambda.Start(adapter.Router)
 }

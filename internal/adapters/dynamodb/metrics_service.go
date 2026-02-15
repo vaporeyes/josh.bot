@@ -18,14 +18,17 @@ type MetricsService struct {
 	client         DynamoDBClient
 	liftsTableName string
 	dataTableName  string
+	memService     domain.MemService
 }
 
 // NewMetricsService creates a DynamoDB-backed MetricsService.
-func NewMetricsService(client DynamoDBClient, liftsTableName, dataTableName string) *MetricsService {
+// memService is optional; if nil, the dev section is omitted from metrics.
+func NewMetricsService(client DynamoDBClient, liftsTableName, dataTableName string, memService domain.MemService) *MetricsService {
 	return &MetricsService{
 		client:         client,
 		liftsTableName: liftsTableName,
 		dataTableName:  dataTableName,
+		memService:     memService,
 	}
 }
 
@@ -43,7 +46,7 @@ func (s *MetricsService) GetMetrics() (domain.MetricsResponse, error) {
 
 	now := time.Now().UTC()
 
-	return domain.MetricsResponse{
+	resp := domain.MetricsResponse{
 		Timestamp: now.Format(time.RFC3339),
 		Human: domain.HumanMetrics{
 			Focus:            focus,
@@ -55,7 +58,16 @@ func (s *MetricsService) GetMetrics() (domain.MetricsResponse, error) {
 			},
 			LastWorkout: domain.LastWorkout(lifts),
 		},
-	}, nil
+	}
+
+	if s.memService != nil {
+		stats, err := s.memService.GetStats()
+		if err == nil {
+			resp.Dev = &stats
+		}
+	}
+
+	return resp, nil
 }
 
 // scanLifts retrieves all lift records from the lifts table.

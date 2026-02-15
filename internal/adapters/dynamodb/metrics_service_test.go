@@ -46,6 +46,10 @@ func (m *mockMetricsClient) DeleteItem(ctx context.Context, params *dynamodb.Del
 	return &dynamodb.DeleteItemOutput{}, nil
 }
 
+func (m *mockMetricsClient) Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	return &dynamodb.QueryOutput{}, nil
+}
+
 func marshalLift(t *testing.T, l domain.Lift) map[string]types.AttributeValue {
 	t.Helper()
 	item, err := attributevalue.MarshalMap(l)
@@ -78,7 +82,7 @@ func TestMetricsService_GetMetrics(t *testing.T) {
 		getItemOutput: &dynamodb.GetItemOutput{Item: statusItem},
 	}
 
-	svc := NewMetricsService(mock, "lifts-table", "data-table")
+	svc := NewMetricsService(mock, "lifts-table", "data-table", nil)
 	resp, err := svc.GetMetrics()
 	if err != nil {
 		t.Fatalf("GetMetrics error: %v", err)
@@ -129,7 +133,7 @@ func TestMetricsService_EmptyLifts(t *testing.T) {
 		getItemOutput: &dynamodb.GetItemOutput{Item: statusItem},
 	}
 
-	svc := NewMetricsService(mock, "lifts-table", "data-table")
+	svc := NewMetricsService(mock, "lifts-table", "data-table", nil)
 	resp, err := svc.GetMetrics()
 	if err != nil {
 		t.Fatalf("GetMetrics error: %v", err)
@@ -152,7 +156,7 @@ func TestMetricsService_ScanError(t *testing.T) {
 		getItemOutput: &dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}},
 	}
 
-	svc := NewMetricsService(mock, "lifts-table", "data-table")
+	svc := NewMetricsService(mock, "lifts-table", "data-table", nil)
 	_, err := svc.GetMetrics()
 	if err == nil {
 		t.Fatal("expected error from scan failure, got nil")
@@ -170,7 +174,7 @@ func TestMetricsService_FocusMissing(t *testing.T) {
 		getItemOutput: &dynamodb.GetItemOutput{Item: statusItem},
 	}
 
-	svc := NewMetricsService(mock, "lifts-table", "data-table")
+	svc := NewMetricsService(mock, "lifts-table", "data-table", nil)
 	resp, err := svc.GetMetrics()
 	if err != nil {
 		t.Fatalf("GetMetrics error: %v", err)

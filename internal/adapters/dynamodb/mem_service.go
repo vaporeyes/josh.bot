@@ -1,0 +1,300 @@
+// ABOUTME: This file implements MemService using DynamoDB for reading claude-mem data.
+// ABOUTME: It queries the josh-bot-mem table using the type-index GSI and prefix-based scans.
+package dynamodb
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/jduncan/josh-bot/internal/domain"
+)
+
+// MemService implements domain.MemService using DynamoDB.
+type MemService struct {
+	client    DynamoDBClient
+	tableName string
+}
+
+// NewMemService creates a DynamoDB-backed MemService.
+func NewMemService(client DynamoDBClient, tableName string) *MemService {
+	return &MemService{client: client, tableName: tableName}
+}
+
+// AIDEV-NOTE: type-index GSI has partition key "type" and sort key "created_at_epoch".
+const typeIndexName = "type-index"
+
+// GetObservations returns observations, optionally filtered by type and project.
+// When obsType is provided, uses Query on type-index GSI. Otherwise uses Scan with prefix filter.
+func (s *MemService) GetObservations(obsType, project string) ([]domain.MemObservation, error) {
+	var items []map[string]types.AttributeValue
+
+	if obsType != "" {
+		// Query the type-index GSI for the specific observation type
+		queryItems, err := s.queryByType(obsType, project)
+		if err != nil {
+			return nil, fmt.Errorf("query observations: %w", err)
+		}
+		items = queryItems
+	} else {
+		// Scan with obs# prefix filter
+		scanItems, err := s.scanByPrefix("obs#", project)
+		if err != nil {
+			return nil, fmt.Errorf("scan observations: %w", err)
+		}
+		items = scanItems
+	}
+
+	observations := make([]domain.MemObservation, 0, len(items))
+	for _, item := range items {
+		var obs domain.MemObservation
+		if err := attributevalue.UnmarshalMap(item, &obs); err != nil {
+			return nil, fmt.Errorf("unmarshal observation: %w", err)
+		}
+		observations = append(observations, obs)
+	}
+
+	return observations, nil
+}
+
+// GetObservation returns a single observation by ID.
+func (s *MemService) GetObservation(id string) (domain.MemObservation, error) {
+	key := id
+	if !strings.HasPrefix(id, "obs#") {
+		key = "obs#" + id
+	}
+
+	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: key},
+		},
+	})
+	if err != nil {
+		return domain.MemObservation{}, fmt.Errorf("dynamodb GetItem: %w", err)
+	}
+	if output.Item == nil {
+		return domain.MemObservation{}, fmt.Errorf("observation %q not found", id)
+	}
+
+	var obs domain.MemObservation
+	if err := attributevalue.UnmarshalMap(output.Item, &obs); err != nil {
+		return domain.MemObservation{}, fmt.Errorf("unmarshal observation: %w", err)
+	}
+
+	return obs, nil
+}
+
+// GetSummaries returns summaries, optionally filtered by project.
+func (s *MemService) GetSummaries(project string) ([]domain.MemSummary, error) {
+	items, err := s.queryByType("summary", project)
+	if err != nil {
+		return nil, fmt.Errorf("query summaries: %w", err)
+	}
+
+	summaries := make([]domain.MemSummary, 0, len(items))
+	for _, item := range items {
+		var summary domain.MemSummary
+		if err := attributevalue.UnmarshalMap(item, &summary); err != nil {
+			return nil, fmt.Errorf("unmarshal summary: %w", err)
+		}
+		summaries = append(summaries, summary)
+	}
+
+	return summaries, nil
+}
+
+// GetSummary returns a single summary by ID.
+func (s *MemService) GetSummary(id string) (domain.MemSummary, error) {
+	key := id
+	if !strings.HasPrefix(id, "summary#") {
+		key = "summary#" + id
+	}
+
+	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: key},
+		},
+	})
+	if err != nil {
+		return domain.MemSummary{}, fmt.Errorf("dynamodb GetItem: %w", err)
+	}
+	if output.Item == nil {
+		return domain.MemSummary{}, fmt.Errorf("summary %q not found", id)
+	}
+
+	var summary domain.MemSummary
+	if err := attributevalue.UnmarshalMap(output.Item, &summary); err != nil {
+		return domain.MemSummary{}, fmt.Errorf("unmarshal summary: %w", err)
+	}
+
+	return summary, nil
+}
+
+// GetPrompts returns all prompts.
+func (s *MemService) GetPrompts() ([]domain.MemPrompt, error) {
+	items, err := s.queryByType("prompt", "")
+	if err != nil {
+		return nil, fmt.Errorf("query prompts: %w", err)
+	}
+
+	prompts := make([]domain.MemPrompt, 0, len(items))
+	for _, item := range items {
+		var prompt domain.MemPrompt
+		if err := attributevalue.UnmarshalMap(item, &prompt); err != nil {
+			return nil, fmt.Errorf("unmarshal prompt: %w", err)
+		}
+		prompts = append(prompts, prompt)
+	}
+
+	return prompts, nil
+}
+
+// GetPrompt returns a single prompt by ID.
+func (s *MemService) GetPrompt(id string) (domain.MemPrompt, error) {
+	key := id
+	if !strings.HasPrefix(id, "prompt#") {
+		key = "prompt#" + id
+	}
+
+	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: key},
+		},
+	})
+	if err != nil {
+		return domain.MemPrompt{}, fmt.Errorf("dynamodb GetItem: %w", err)
+	}
+	if output.Item == nil {
+		return domain.MemPrompt{}, fmt.Errorf("prompt %q not found", id)
+	}
+
+	var prompt domain.MemPrompt
+	if err := attributevalue.UnmarshalMap(output.Item, &prompt); err != nil {
+		return domain.MemPrompt{}, fmt.Errorf("unmarshal prompt: %w", err)
+	}
+
+	return prompt, nil
+}
+
+// GetStats scans the full table and aggregates counts by type and project.
+// AIDEV-NOTE: Full table scan is acceptable for mem table sizes (~hundreds to low thousands of items).
+func (s *MemService) GetStats() (domain.MemStats, error) {
+	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+		TableName: &s.tableName,
+	})
+	if err != nil {
+		return domain.MemStats{}, fmt.Errorf("dynamodb Scan: %w", err)
+	}
+
+	stats := domain.MemStats{
+		ByType:    make(map[string]int),
+		ByProject: make(map[string]int),
+	}
+
+	for _, item := range output.Items {
+		itemType := ""
+		if typeAttr, ok := item["type"]; ok {
+			if s, ok := typeAttr.(*types.AttributeValueMemberS); ok {
+				itemType = s.Value
+			}
+		}
+
+		project := ""
+		if projAttr, ok := item["project"]; ok {
+			if s, ok := projAttr.(*types.AttributeValueMemberS); ok {
+				project = s.Value
+			}
+		}
+
+		stats.ByType[itemType]++
+		if project != "" {
+			stats.ByProject[project]++
+		}
+
+		// Count by category based on id prefix
+		idStr := ""
+		if idAttr, ok := item["id"]; ok {
+			if s, ok := idAttr.(*types.AttributeValueMemberS); ok {
+				idStr = s.Value
+			}
+		}
+		switch {
+		case strings.HasPrefix(idStr, "obs#"):
+			stats.TotalObservations++
+		case strings.HasPrefix(idStr, "summary#"):
+			stats.TotalSummaries++
+		case strings.HasPrefix(idStr, "prompt#"):
+			stats.TotalPrompts++
+		}
+	}
+
+	return stats, nil
+}
+
+// queryByType queries the type-index GSI for items of a given type, with optional project filter.
+func (s *MemService) queryByType(typeName, project string) ([]map[string]types.AttributeValue, error) {
+	indexName := typeIndexName
+	keyCondExpr := "#t = :type"
+	exprNames := map[string]string{
+		"#t": "type",
+	}
+	exprValues := map[string]types.AttributeValue{
+		":type": &types.AttributeValueMemberS{Value: typeName},
+	}
+
+	input := &dynamodb.QueryInput{
+		TableName:                 &s.tableName,
+		IndexName:                 &indexName,
+		KeyConditionExpression:    &keyCondExpr,
+		ExpressionAttributeNames:  exprNames,
+		ExpressionAttributeValues: exprValues,
+		ScanIndexForward:          boolPtr(false),
+	}
+
+	if project != "" {
+		filterExpr := "project = :project"
+		input.FilterExpression = &filterExpr
+		input.ExpressionAttributeValues[":project"] = &types.AttributeValueMemberS{Value: project}
+	}
+
+	output, err := s.client.Query(context.Background(), input)
+	if err != nil {
+		return nil, fmt.Errorf("dynamodb Query: %w", err)
+	}
+
+	return output.Items, nil
+}
+
+// scanByPrefix scans the table for items whose id begins with the given prefix.
+func (s *MemService) scanByPrefix(prefix, project string) ([]map[string]types.AttributeValue, error) {
+	filterExpr := "begins_with(id, :prefix)"
+	exprValues := map[string]types.AttributeValue{
+		":prefix": &types.AttributeValueMemberS{Value: prefix},
+	}
+
+	if project != "" {
+		filterExpr += " AND project = :project"
+		exprValues[":project"] = &types.AttributeValueMemberS{Value: project}
+	}
+
+	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+		TableName:                 &s.tableName,
+		FilterExpression:          &filterExpr,
+		ExpressionAttributeValues: exprValues,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("dynamodb Scan: %w", err)
+	}
+
+	return output.Items, nil
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}

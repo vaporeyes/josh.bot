@@ -14,10 +14,11 @@ import (
 type Adapter struct {
 	service        domain.BotService
 	metricsService domain.MetricsService
+	memService     domain.MemService
 }
 
-func NewAdapter(service domain.BotService, metricsService domain.MetricsService) *Adapter {
-	return &Adapter{service: service, metricsService: metricsService}
+func NewAdapter(service domain.BotService, metricsService domain.MetricsService, memService domain.MemService) *Adapter {
+	return &Adapter{service: service, metricsService: metricsService, memService: memService}
 }
 
 // MetricsHandler handles GET /v1/metrics.
@@ -453,6 +454,122 @@ func (a *Adapter) DeleteLogEntryHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeOK(w, http.StatusOK)
+}
+
+// MemObservationsHandler handles GET /v1/mem/observations.
+func (a *Adapter) MemObservationsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	obsType := r.URL.Query().Get("type")
+	project := r.URL.Query().Get("project")
+	observations, err := a.memService.GetObservations(obsType, project)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, observations)
+}
+
+// MemObservationHandler handles GET /v1/mem/observations/{id}.
+func (a *Adapter) MemObservationHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/v1/mem/observations/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+	obs, err := a.memService.GetObservation(id)
+	if err != nil {
+		http.Error(w, `{"error":"observation not found"}`, http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, obs)
+}
+
+// MemSummariesHandler handles GET /v1/mem/summaries.
+func (a *Adapter) MemSummariesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	project := r.URL.Query().Get("project")
+	summaries, err := a.memService.GetSummaries(project)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, summaries)
+}
+
+// MemSummaryHandler handles GET /v1/mem/summaries/{id}.
+func (a *Adapter) MemSummaryHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/v1/mem/summaries/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+	summary, err := a.memService.GetSummary(id)
+	if err != nil {
+		http.Error(w, `{"error":"summary not found"}`, http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
+// MemPromptsHandler handles GET /v1/mem/prompts.
+func (a *Adapter) MemPromptsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	prompts, err := a.memService.GetPrompts()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, prompts)
+}
+
+// MemPromptHandler handles GET /v1/mem/prompts/{id}.
+func (a *Adapter) MemPromptHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/v1/mem/prompts/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+	prompt, err := a.memService.GetPrompt(id)
+	if err != nil {
+		http.Error(w, `{"error":"prompt not found"}`, http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, prompt)
+}
+
+// MemStatsHandler handles GET /v1/mem/stats.
+func (a *Adapter) MemStatsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+	stats, err := a.memService.GetStats()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
 }
 
 // writeJSON encodes val as JSON and writes it to the response.
