@@ -24,6 +24,7 @@ func main() {
 	mux.HandleFunc("/v1/metrics", adapter.MetricsHandler)
 	mux.HandleFunc("/v1/projects", adapter.ProjectsHandler)
 	mux.HandleFunc("/v1/notes", adapter.NotesHandler)
+	mux.HandleFunc("/v1/til", adapter.TILsHandler)
 
 	// Start the server
 	log.Println("Starting server on :8080")

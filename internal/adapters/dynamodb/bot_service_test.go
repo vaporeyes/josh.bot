@@ -788,3 +788,188 @@ func TestDeleteNote_DynamoDBError(t *testing.T) {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
 }
+
+// --- TIL Tests ---
+
+func TestGetTILs_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		scanOutput: &dynamodb.ScanOutput{
+			Items: []map[string]types.AttributeValue{
+				{
+					"id":    &types.AttributeValueMemberS{Value: "til#abc123"},
+					"title": &types.AttributeValueMemberS{Value: "Go slices grow by 2x"},
+					"body":  &types.AttributeValueMemberS{Value: "When a slice exceeds capacity, Go doubles it"},
+					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+						&types.AttributeValueMemberS{Value: "go"},
+					}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	tils, err := svc.GetTILs("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tils) != 1 {
+		t.Fatalf("expected 1 til, got %d", len(tils))
+	}
+	if tils[0].Title != "Go slices grow by 2x" {
+		t.Errorf("expected title 'Go slices grow by 2x', got '%s'", tils[0].Title)
+	}
+}
+
+func TestGetTILs_FilterByTag(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		scanOutput: &dynamodb.ScanOutput{
+			Items: []map[string]types.AttributeValue{
+				{
+					"id":    &types.AttributeValueMemberS{Value: "til#abc123"},
+					"title": &types.AttributeValueMemberS{Value: "Go slices grow by 2x"},
+					"body":  &types.AttributeValueMemberS{Value: "Capacity doubles"},
+					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+						&types.AttributeValueMemberS{Value: "go"},
+					}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	tils, err := svc.GetTILs("go")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tils) != 1 {
+		t.Fatalf("expected 1 til, got %d", len(tils))
+	}
+	if mock.scanInput == nil {
+		t.Fatal("expected Scan to be called")
+	}
+	filterExpr := *mock.scanInput.FilterExpression
+	if !strings.Contains(filterExpr, "contains") {
+		t.Errorf("expected filter expression to contain 'contains', got '%s'", filterExpr)
+	}
+}
+
+func TestGetTIL_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"id":    &types.AttributeValueMemberS{Value: "til#abc123"},
+				"title": &types.AttributeValueMemberS{Value: "Go slices grow by 2x"},
+				"body":  &types.AttributeValueMemberS{Value: "Capacity doubles"},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	til, err := svc.GetTIL("abc123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if til.Title != "Go slices grow by 2x" {
+		t.Errorf("expected title 'Go slices grow by 2x', got '%s'", til.Title)
+	}
+}
+
+func TestGetTIL_NotFound(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{Item: nil},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetTIL("nonexistent")
+	if err == nil {
+		t.Error("expected error for missing til, got nil")
+	}
+}
+
+func TestCreateTIL_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.CreateTIL(domain.TIL{
+		Title: "Go slices grow by 2x",
+		Body:  "Capacity doubles",
+		Tags:  []string{"go"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.putInput == nil {
+		t.Fatal("expected PutItem to be called")
+	}
+	idAttr, ok := mock.putInput.Item["id"]
+	if !ok {
+		t.Fatal("expected 'id' in put item")
+	}
+	idVal := idAttr.(*types.AttributeValueMemberS).Value
+	if !strings.HasPrefix(idVal, "til#") {
+		t.Errorf("expected id to start with 'til#', got '%s'", idVal)
+	}
+}
+
+func TestCreateTIL_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.CreateTIL(domain.TIL{Title: "Test", Body: "body"})
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+func TestUpdateTIL_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateTIL("abc123", map[string]any{
+		"title": "Updated Title",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.updateInput == nil {
+		t.Fatal("expected UpdateItem to be called")
+	}
+	idAttr := mock.updateInput.Key["id"]
+	if idAttr.(*types.AttributeValueMemberS).Value != "til#abc123" {
+		t.Errorf("expected key 'til#abc123', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+}
+
+func TestUpdateTIL_InvalidField(t *testing.T) {
+	mock := &mockDynamoDBClient{}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateTIL("test", map[string]any{"hacker": "nope"})
+	if err == nil {
+		t.Error("expected error for invalid field, got nil")
+	}
+}
+
+func TestDeleteTIL_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.DeleteTIL("abc123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.deleteInput == nil {
+		t.Fatal("expected DeleteItem to be called")
+	}
+	idAttr := mock.deleteInput.Key["id"]
+	if idAttr.(*types.AttributeValueMemberS).Value != "til#abc123" {
+		t.Errorf("expected key 'til#abc123', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+}
+
+func TestDeleteTIL_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.DeleteTIL("test")
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}

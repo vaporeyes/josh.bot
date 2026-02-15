@@ -71,6 +71,23 @@ func NoteID() string {
 	return "note#" + hex.EncodeToString(b)
 }
 
+// TIL represents a "Today I Learned" entry.
+type TIL struct {
+	ID        string   `json:"id" dynamodbav:"id"`
+	Title     string   `json:"title" dynamodbav:"title"`
+	Body      string   `json:"body" dynamodbav:"body"`
+	Tags      []string `json:"tags" dynamodbav:"tags"`
+	CreatedAt string   `json:"created_at" dynamodbav:"created_at"`
+	UpdatedAt string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
+}
+
+// TILID generates a random ID with a "til#" prefix.
+func TILID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return "til#" + hex.EncodeToString(b)
+}
+
 // Lift represents a single set within a workout.
 type Lift struct {
 	ID           string  `json:"id" dynamodbav:"id"`
@@ -131,4 +148,9 @@ type BotService interface {
 	CreateNote(note Note) error
 	UpdateNote(id string, fields map[string]any) error
 	DeleteNote(id string) error
+	GetTILs(tag string) ([]TIL, error)
+	GetTIL(id string) (TIL, error)
+	CreateTIL(til TIL) error
+	UpdateTIL(id string, fields map[string]any) error
+	DeleteTIL(id string) error
 }

@@ -168,6 +168,53 @@ func (s *BotService) DeleteNote(id string) error {
 	return nil
 }
 
+// GetTILs returns hardcoded TIL entries, optionally filtered by tag.
+func (s *BotService) GetTILs(tag string) ([]domain.TIL, error) {
+	tils := []domain.TIL{
+		{ID: "til#abc123", Title: "Go slices grow by 2x", Body: "When a slice exceeds capacity, Go doubles it", Tags: []string{"go"}},
+		{ID: "til#def456", Title: "DynamoDB scan is O(n)", Body: "Scans read the entire table", Tags: []string{"aws", "dynamodb"}},
+	}
+	if tag == "" {
+		return tils, nil
+	}
+	var filtered []domain.TIL
+	for _, t := range tils {
+		for _, tg := range t.Tags {
+			if tg == tag {
+				filtered = append(filtered, t)
+				break
+			}
+		}
+	}
+	return filtered, nil
+}
+
+// GetTIL returns a hardcoded TIL by ID.
+func (s *BotService) GetTIL(id string) (domain.TIL, error) {
+	tils, _ := s.GetTILs("")
+	for _, t := range tils {
+		if t.ID == id {
+			return t, nil
+		}
+	}
+	return domain.TIL{}, fmt.Errorf("til %q not found", id)
+}
+
+// CreateTIL is a no-op in the mock adapter.
+func (s *BotService) CreateTIL(til domain.TIL) error {
+	return nil
+}
+
+// UpdateTIL is a no-op in the mock adapter.
+func (s *BotService) UpdateTIL(id string, fields map[string]any) error {
+	return nil
+}
+
+// DeleteTIL is a no-op in the mock adapter.
+func (s *BotService) DeleteTIL(id string) error {
+	return nil
+}
+
 // MetricsService is a mock implementation of domain.MetricsService.
 type MetricsService struct{}
 

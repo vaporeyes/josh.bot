@@ -297,6 +297,85 @@ func (a *Adapter) DeleteNoteHandler(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, http.StatusOK)
 }
 
+func (a *Adapter) TILsHandler(w http.ResponseWriter, r *http.Request) {
+	tag := r.URL.Query().Get("tag")
+	tils, err := a.service.GetTILs(tag)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, tils)
+}
+
+func (a *Adapter) CreateTILHandler(w http.ResponseWriter, r *http.Request) {
+	var til domain.TIL
+	if err := json.NewDecoder(r.Body).Decode(&til); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.CreateTIL(til); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusCreated)
+}
+
+// TILHandler handles GET /v1/til/{id}.
+func (a *Adapter) TILHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/til/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	til, err := a.service.GetTIL(id)
+	if err != nil {
+		http.Error(w, `{"error":"til not found"}`, http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, til)
+}
+
+func (a *Adapter) UpdateTILHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/til/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var fields map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.UpdateTIL(id, fields); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
+func (a *Adapter) DeleteTILHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/til/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.DeleteTIL(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
 // writeJSON encodes val as JSON and writes it to the response.
 func writeJSON(w http.ResponseWriter, statusCode int, val any) {
 	w.Header().Set("Content-Type", "application/json")

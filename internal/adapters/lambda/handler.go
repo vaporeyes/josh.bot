@@ -65,6 +65,11 @@ func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayPr
 	case strings.HasPrefix(req.Path, "/v1/notes/"):
 		id := strings.TrimPrefix(req.Path, "/v1/notes/")
 		return a.handleNote(req, id)
+	case req.Path == "/v1/til":
+		return a.handleTILs(req)
+	case strings.HasPrefix(req.Path, "/v1/til/"):
+		id := strings.TrimPrefix(req.Path, "/v1/til/")
+		return a.handleTIL(req, id)
 	default:
 		return jsonResponse(404, `{"error":"not found"}`), nil
 	}
@@ -301,6 +306,71 @@ func (a *Adapter) handleNote(req events.APIGatewayProxyRequest, id string) (even
 
 	case "DELETE":
 		if err := a.service.DeleteNote(id); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+}
+
+// handleTILs routes GET (list) and POST (create) for /v1/til.
+func (a *Adapter) handleTILs(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		tag := req.QueryStringParameters["tag"]
+		tils, err := a.service.GetTILs(tag)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		body, err := json.Marshal(tils)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "POST":
+		var til domain.TIL
+		if err := json.Unmarshal([]byte(req.Body), &til); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.service.CreateTIL(til); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(201, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+}
+
+// handleTIL routes GET, PUT, DELETE for /v1/til/{id}.
+func (a *Adapter) handleTIL(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		til, err := a.service.GetTIL(id)
+		if err != nil {
+			return jsonResponse(404, `{"error":"til not found"}`), nil
+		}
+		body, err := json.Marshal(til)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "PUT":
+		var fields map[string]any
+		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.service.UpdateTIL(id, fields); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	case "DELETE":
+		if err := a.service.DeleteTIL(id); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
