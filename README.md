@@ -1,6 +1,6 @@
 # josh.bot
 
-A personal API-first platform for Josh, accessible at [josh.bot](https://josh.bot). Built as a cloud-native backend that powers [k8-one](https://k8-one.com) (Josh's AI agent on Slack) with real-time status, project tracking, and link management.
+A personal API-first platform for Josh, accessible at [josh.bot](https://josh.bot). Built as a cloud-native backend that powers [k8-one](https://k8-one.com) (Josh's AI agent on Slack) with real-time status, project tracking, link management, notes, TILs, activity logging, and fitness metrics.
 
 ## Architecture
 
@@ -8,17 +8,18 @@ Built with **Hexagonal Architecture** (Ports and Adapters) in Go. The core domai
 
 ```
 cmd/
-  api/          Local dev server (mock data, no auth)
-  lambda/       Production entrypoint (DynamoDB, API key auth)
+  api/            Local dev server (mock data, no auth)
+  lambda/         Production entrypoint (DynamoDB, API key auth)
+  import-lifts/   CLI tool for importing Strong app workout CSV exports
 internal/
-  domain/       Core types and service interface
+  domain/         Core types, service interfaces, and calculation helpers
   adapters/
-    dynamodb/   DynamoDB-backed service implementation
-    lambda/     API Gateway event routing
-    http/       HTTP handlers for local dev
-    mock/       In-memory service for testing
-scripts/        Seed scripts for DynamoDB data
-terraform/      Infrastructure as code
+    dynamodb/     DynamoDB-backed service implementation
+    lambda/       API Gateway event routing
+    http/         HTTP handlers for local dev
+    mock/         In-memory service for testing
+scripts/          Seed scripts and DynamoDB table creation
+terraform/        Infrastructure as code
 ```
 
 ### Data Model
@@ -30,8 +31,13 @@ Uses DynamoDB **single-table design** with the `id` partition key and prefixed k
 | `status` | `status` | Bot owner status (singleton) |
 | `project#` | `project#modular-aws-backend` | Projects by slug |
 | `link#` | `link#a1b2c3d4e5f6` | Links by SHA256 URL hash |
+| `note#` | `note#a1b2c3d4e5f6a1b2` | Notes (random ID) |
+| `til#` | `til#a1b2c3d4e5f6a1b2` | TIL entries (random ID) |
+| `log#` | `log#a1b2c3d4e5f6a1b2` | Activity log entries (random ID) |
 
-Link IDs are derived from the URL via SHA256, giving automatic deduplication -- saving the same URL twice updates the existing entry.
+Link IDs are derived from the URL via SHA256, giving automatic deduplication -- saving the same URL twice updates the existing entry. Notes, TILs, and log entries use random 8-byte hex IDs.
+
+Lift/workout data lives in a separate `josh-bot-lifts` table with a `date-index` GSI for time-range queries. Lift IDs are deterministic (date + exercise + set order) making CSV re-imports idempotent.
 
 ## Getting Started
 
@@ -63,8 +69,12 @@ The server starts on `http://localhost:8080`. Test it:
 
 ```bash
 curl http://localhost:8080/v1/status
+curl http://localhost:8080/v1/metrics
 curl http://localhost:8080/v1/projects
 curl http://localhost:8080/v1/links
+curl http://localhost:8080/v1/notes
+curl http://localhost:8080/v1/til
+curl http://localhost:8080/v1/log
 ```
 
 ### Task Runner
@@ -84,7 +94,7 @@ task seed           # Seed DynamoDB with initial data
 
 ## API Reference
 
-All endpoints return JSON. Write endpoints require an `x-api-key` header. `GET /v1/status` is the only public (unauthenticated) route.
+All endpoints return JSON. Write endpoints require an `x-api-key` header. `GET /v1/status` and `GET /v1/metrics` are the only public (unauthenticated) routes.
 
 ### Status
 
@@ -187,6 +197,96 @@ curl -X DELETE https://api.josh.bot/v1/links/a1b2c3d4e5f6 \
   -H "x-api-key: <key>"
 ```
 
+### Metrics
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/v1/metrics` | No | Get fitness and performance metrics dashboard |
+
+```bash
+curl https://api.josh.bot/v1/metrics
+```
+
+**Response shape:**
+
+```json
+{
+  "timestamp": "2026-02-15T12:00:00Z",
+  "human": {
+    "focus": "Powerlifting / Hypertrophy",
+    "weekly_tonnage_lbs": 42500,
+    "estimated_1rm": { "deadlift": 525, "squat": 455, "bench": 315 },
+    "last_workout": {
+      "date": "2026-02-14",
+      "name": "Pull Day",
+      "exercises": ["Deadlift (Barbell)", "Barbell Row"],
+      "sets": 18,
+      "tonnage_lbs": 12500
+    }
+  }
+}
+```
+
+### Notes
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/v1/notes` | Yes | List all notes (optional `?tag=` filter) |
+| POST | `/v1/notes` | Yes | Create a note |
+| GET | `/v1/notes/{id}` | Yes | Get a note by ID |
+| PUT | `/v1/notes/{id}` | Yes | Partial update (allowed fields: `title`, `body`, `tags`) |
+| DELETE | `/v1/notes/{id}` | Yes | Delete a note |
+
+```bash
+# Create a note
+curl -X POST https://api.josh.bot/v1/notes \
+  -H "x-api-key: <key>" -H "Content-Type: application/json" \
+  -d '{"title": "API design thoughts", "body": "Keep endpoints RESTful...", "tags": ["architecture"]}'
+
+# List notes filtered by tag
+curl -H "x-api-key: <key>" "https://api.josh.bot/v1/notes?tag=architecture"
+```
+
+### TIL (Today I Learned)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/v1/til` | Yes | List all TILs (optional `?tag=` filter) |
+| POST | `/v1/til` | Yes | Create a TIL entry |
+| GET | `/v1/til/{id}` | Yes | Get a TIL by ID |
+| PUT | `/v1/til/{id}` | Yes | Partial update (allowed fields: `title`, `body`, `tags`) |
+| DELETE | `/v1/til/{id}` | Yes | Delete a TIL |
+
+```bash
+# Create a TIL
+curl -X POST https://api.josh.bot/v1/til \
+  -H "x-api-key: <key>" -H "Content-Type: application/json" \
+  -d '{"title": "Go slices grow by 2x", "body": "When capacity is exceeded, Go doubles the backing array", "tags": ["go"]}'
+
+# List TILs filtered by tag
+curl -H "x-api-key: <key>" "https://api.josh.bot/v1/til?tag=go"
+```
+
+### Activity Log
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/v1/log` | Yes | List all entries (optional `?tag=` filter) |
+| POST | `/v1/log` | Yes | Create a log entry |
+| GET | `/v1/log/{id}` | Yes | Get a log entry by ID |
+| PUT | `/v1/log/{id}` | Yes | Partial update (allowed fields: `message`, `tags`) |
+| DELETE | `/v1/log/{id}` | Yes | Delete a log entry |
+
+```bash
+# Log an activity
+curl -X POST https://api.josh.bot/v1/log \
+  -H "x-api-key: <key>" -H "Content-Type: application/json" \
+  -d '{"message": "deployed josh-bot v1.3", "tags": ["deploy", "infra"]}'
+
+# List recent activity filtered by tag
+curl -H "x-api-key: <key>" "https://api.josh.bot/v1/log?tag=deploy"
+```
+
 ## Infrastructure
 
 Managed with Terraform in the `terraform/` directory:
@@ -194,9 +294,10 @@ Managed with Terraform in the `terraform/` directory:
 | Resource | Purpose |
 |----------|---------|
 | **AWS Lambda** (`provided.al2023`, ARM64) | Runs the Go API |
-| **API Gateway** (HTTP API) | Routes requests to Lambda |
-| **DynamoDB** (PAY_PER_REQUEST) | Single-table data store |
-| **ACM + Route53** | Custom domain (`api.josh.bot`) with TLS |
+| **API Gateway** (HTTP API) | Routes requests to Lambda (10 rps / 20 burst rate limit, default endpoint disabled) |
+| **DynamoDB** `josh-bot-data` (PAY_PER_REQUEST) | Single-table store for status, projects, links, notes, TILs, log entries |
+| **DynamoDB** `josh-bot-lifts` (PAY_PER_REQUEST) | Workout/lift data with `date-index` GSI |
+| **ACM + Route53** | Custom domain (`api.josh.bot`) with TLS 1.2 |
 | **SSM Parameter Store** | Stores the generated API key |
 | **IAM** | Lambda execution role with scoped DynamoDB permissions |
 | **S3** | Terraform state backend with native locking |
@@ -216,6 +317,8 @@ Required GitHub secrets: `AWS_ACCOUNT_ID`, `TERRAFORM_BUCKET`
 - **TDD**: All features built test-first with mocked DynamoDB client
 - **Field allowlists**: Write endpoints only accept known fields, preventing arbitrary data injection
 - **API key auth**: All write endpoints (and most reads) require `x-api-key` header
+- **Rate limiting**: 10 requests/sec with 20 burst at the API Gateway stage level
+- **Custom domain only**: Default API Gateway execute-api endpoint is disabled
 
 ## Seeding Data
 

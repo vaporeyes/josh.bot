@@ -3,6 +3,8 @@ name: Deploy josh.bot
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'README.md'
 
 permissions:
   id-token: write # Required for requesting the JWT
