@@ -23,8 +23,9 @@ resource "aws_lambda_function" "josh_bot_api" {
 
 # 2. API Gateway (HTTP API - cheaper and faster than REST API)
 resource "aws_apigatewayv2_api" "josh_bot_gw" {
-  name          = "josh-bot-gateway"
-  protocol_type = "HTTP"
+  name                         = "josh-bot-gateway"
+  protocol_type                = "HTTP"
+  disable_execute_api_endpoint = true # Force traffic through api.josh.bot
 }
 
 resource "aws_apigatewayv2_integration" "lambda_link" {
@@ -55,6 +56,11 @@ resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.josh_bot_gw.id
   name        = "$default"
   auto_deploy = true
+
+  default_route_settings {
+    throttling_rate_limit  = 10 # 10 requests per second
+    throttling_burst_limit = 20 # 20 concurrent burst
+  }
 }
 
 # 6. DynamoDB table for bot data (single-table design)
