@@ -17,6 +17,7 @@ resource "aws_lambda_function" "josh_bot_api" {
       API_KEY          = random_password.api_key.result
       TABLE_NAME       = aws_dynamodb_table.josh_bot_data.name
       LIFTS_TABLE_NAME = aws_dynamodb_table.josh_bot_lifts.name
+      MEM_TABLE_NAME   = aws_dynamodb_table.josh_bot_mem.name
     }
   }
 }
@@ -98,7 +99,36 @@ resource "aws_dynamodb_table" "josh_bot_lifts" {
   }
 }
 
-# 8. API Key (generated and stored in SSM, passed to Lambda as env var)
+# 8. DynamoDB table for claude-mem development context (observations, summaries, prompts)
+resource "aws_dynamodb_table" "josh_bot_mem" {
+  name         = "josh-bot-mem"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+
+  attribute {
+    name = "type"
+    type = "S"
+  }
+
+  attribute {
+    name = "created_at_epoch"
+    type = "N"
+  }
+
+  global_secondary_index {
+    name            = "type-index"
+    hash_key        = "type"
+    range_key       = "created_at_epoch"
+    projection_type = "ALL"
+  }
+}
+
+# 9. API Key (generated and stored in SSM, passed to Lambda as env var)
 resource "random_password" "api_key" {
   length  = 40
   special = false

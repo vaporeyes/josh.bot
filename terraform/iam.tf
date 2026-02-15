@@ -35,6 +35,7 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
           "dynamodb:GetItem",
           "dynamodb:UpdateItem",
           "dynamodb:Scan",
+          "dynamodb:Query",
           "dynamodb:PutItem",
           "dynamodb:DeleteItem",
         ]
@@ -42,6 +43,8 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
         Resource = [
           aws_dynamodb_table.josh_bot_data.arn,
           aws_dynamodb_table.josh_bot_lifts.arn,
+          aws_dynamodb_table.josh_bot_mem.arn,
+          "${aws_dynamodb_table.josh_bot_mem.arn}/index/*",
         ]
       }
     ]
