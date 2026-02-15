@@ -147,3 +147,77 @@ func TestBestE1RM_HighRepSetBeatsHeavySingle(t *testing.T) {
 		t.Errorf("BestE1RM = %d, want 399", got)
 	}
 }
+
+// --- LastWorkout ---
+
+func TestLastWorkout_FindsMostRecent(t *testing.T) {
+	lifts := []Lift{
+		{Date: "2026-02-10 09:00:00", WorkoutName: "Push Day", ExerciseName: "Bench Press (Barbell)", Weight: 225, Reps: 5},
+		{Date: "2026-02-10 09:00:00", WorkoutName: "Push Day", ExerciseName: "Overhead Press (Barbell)", Weight: 135, Reps: 8},
+		{Date: "2026-02-14 10:00:00", WorkoutName: "Pull Day", ExerciseName: "Deadlift (Barbell)", Weight: 405, Reps: 3},
+		{Date: "2026-02-14 10:00:00", WorkoutName: "Pull Day", ExerciseName: "Barbell Row", Weight: 185, Reps: 8},
+		{Date: "2026-02-14 10:00:00", WorkoutName: "Pull Day", ExerciseName: "Deadlift (Barbell)", Weight: 365, Reps: 5},
+	}
+
+	got := LastWorkout(lifts)
+	if got == nil {
+		t.Fatal("LastWorkout returned nil, want a summary")
+	}
+	if got.Date != "2026-02-14" {
+		t.Errorf("Date = %q, want %q", got.Date, "2026-02-14")
+	}
+	if got.Name != "Pull Day" {
+		t.Errorf("Name = %q, want %q", got.Name, "Pull Day")
+	}
+	if got.Sets != 3 {
+		t.Errorf("Sets = %d, want 3", got.Sets)
+	}
+	// Exercises should be unique: Deadlift (Barbell), Barbell Row
+	if len(got.Exercises) != 2 {
+		t.Errorf("Exercises count = %d, want 2: %v", len(got.Exercises), got.Exercises)
+	}
+	// Tonnage: (405*3) + (185*8) + (365*5) = 1215 + 1480 + 1825 = 4520
+	if got.TonnageLbs != 4520 {
+		t.Errorf("TonnageLbs = %d, want 4520", got.TonnageLbs)
+	}
+}
+
+func TestLastWorkout_Empty(t *testing.T) {
+	got := LastWorkout(nil)
+	if got != nil {
+		t.Errorf("LastWorkout(nil) = %v, want nil", got)
+	}
+}
+
+func TestLastWorkout_SingleSet(t *testing.T) {
+	lifts := []Lift{
+		{Date: "2026-02-14 10:00:00", WorkoutName: "Quick Session", ExerciseName: "Squat (Barbell)", Weight: 315, Reps: 1},
+	}
+	got := LastWorkout(lifts)
+	if got == nil {
+		t.Fatal("LastWorkout returned nil")
+	}
+	if got.Sets != 1 {
+		t.Errorf("Sets = %d, want 1", got.Sets)
+	}
+	if len(got.Exercises) != 1 {
+		t.Errorf("Exercises = %d, want 1", len(got.Exercises))
+	}
+	if got.TonnageLbs != 315 {
+		t.Errorf("TonnageLbs = %d, want 315", got.TonnageLbs)
+	}
+}
+
+func TestLastWorkout_DateOnly(t *testing.T) {
+	// Verifies date is extracted as YYYY-MM-DD from the full timestamp
+	lifts := []Lift{
+		{Date: "2026-01-05 17:30:00", WorkoutName: "Evening", ExerciseName: "Bench Press (Barbell)", Weight: 200, Reps: 10},
+	}
+	got := LastWorkout(lifts)
+	if got == nil {
+		t.Fatal("LastWorkout returned nil")
+	}
+	if got.Date != "2026-01-05" {
+		t.Errorf("Date = %q, want %q", got.Date, "2026-01-05")
+	}
+}

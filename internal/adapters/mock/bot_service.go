@@ -141,6 +141,13 @@ func (s *MetricsService) GetMetrics() (domain.MetricsResponse, error) {
 				"squat":    455,
 				"bench":    315,
 			},
+			LastWorkout: &domain.WorkoutSummary{
+				Date:       "2026-02-14",
+				Name:       "Pull Day",
+				Exercises:  []string{"Deadlift (Barbell)", "Barbell Row", "Lat Pulldown (Cable)"},
+				Sets:       18,
+				TonnageLbs: 12500,
+			},
 		},
 	}, nil
 }

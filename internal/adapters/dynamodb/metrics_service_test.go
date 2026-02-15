@@ -106,6 +106,17 @@ func TestMetricsService_GetMetrics(t *testing.T) {
 	if resp.Human.Estimated1RM["bench"] != 247 {
 		t.Errorf("bench E1RM = %d, want 247", resp.Human.Estimated1RM["bench"])
 	}
+
+	// LastWorkout: most recent date is 2026-02-14 (3 sets from that date)
+	if resp.Human.LastWorkout == nil {
+		t.Fatal("expected LastWorkout, got nil")
+	}
+	if resp.Human.LastWorkout.Date != "2026-02-14" {
+		t.Errorf("LastWorkout.Date = %q, want %q", resp.Human.LastWorkout.Date, "2026-02-14")
+	}
+	if resp.Human.LastWorkout.Sets != 3 {
+		t.Errorf("LastWorkout.Sets = %d, want 3", resp.Human.LastWorkout.Sets)
+	}
 }
 
 func TestMetricsService_EmptyLifts(t *testing.T) {
@@ -129,6 +140,9 @@ func TestMetricsService_EmptyLifts(t *testing.T) {
 	}
 	if resp.Human.Estimated1RM["deadlift"] != 0 {
 		t.Errorf("deadlift E1RM = %d, want 0", resp.Human.Estimated1RM["deadlift"])
+	}
+	if resp.Human.LastWorkout != nil {
+		t.Errorf("LastWorkout = %v, want nil for empty lifts", resp.Human.LastWorkout)
 	}
 }
 

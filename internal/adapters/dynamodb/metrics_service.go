@@ -53,6 +53,7 @@ func (s *MetricsService) GetMetrics() (domain.MetricsResponse, error) {
 				"squat":    domain.BestE1RM(lifts, "Squat (Barbell)"),
 				"bench":    domain.BestE1RM(lifts, "Bench Press (Barbell)"),
 			},
+			LastWorkout: domain.LastWorkout(lifts),
 		},
 	}, nil
 }
