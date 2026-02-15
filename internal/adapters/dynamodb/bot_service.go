@@ -540,6 +540,121 @@ func (s *BotService) DeleteTIL(id string) error {
 	return nil
 }
 
+// allowedLogEntryFields defines which log entry fields can be updated via PUT.
+var allowedLogEntryFields = map[string]bool{
+	"message": true, "tags": true,
+}
+
+// --- Log Entry Operations ---
+
+// GetLogEntries fetches all log entries from DynamoDB, optionally filtered by tag.
+func (s *BotService) GetLogEntries(tag string) ([]domain.LogEntry, error) {
+	filterExpr := "begins_with(id, :prefix)"
+	exprValues := map[string]types.AttributeValue{
+		":prefix": &types.AttributeValueMemberS{Value: "log#"},
+	}
+
+	if tag != "" {
+		filterExpr += " AND contains(tags, :tag)"
+		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
+	}
+
+	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+		TableName:                 &s.tableName,
+		FilterExpression:          &filterExpr,
+		ExpressionAttributeValues: exprValues,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("dynamodb Scan: %w", err)
+	}
+
+	entries := make([]domain.LogEntry, 0, len(output.Items))
+	for _, item := range output.Items {
+		var e domain.LogEntry
+		if err := attributevalue.UnmarshalMap(item, &e); err != nil {
+			return nil, fmt.Errorf("unmarshal log entry: %w", err)
+		}
+		entries = append(entries, e)
+	}
+
+	return entries, nil
+}
+
+// GetLogEntry fetches a single log entry by ID from DynamoDB.
+func (s *BotService) GetLogEntry(id string) (domain.LogEntry, error) {
+	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: "log#" + id},
+		},
+	})
+	if err != nil {
+		return domain.LogEntry{}, fmt.Errorf("dynamodb GetItem: %w", err)
+	}
+	if output.Item == nil {
+		return domain.LogEntry{}, fmt.Errorf("log entry %q not found", id)
+	}
+
+	var entry domain.LogEntry
+	if err := attributevalue.UnmarshalMap(output.Item, &entry); err != nil {
+		return domain.LogEntry{}, fmt.Errorf("unmarshal log entry: %w", err)
+	}
+
+	return entry, nil
+}
+
+// CreateLogEntry adds a new log entry to DynamoDB with a generated random ID.
+func (s *BotService) CreateLogEntry(entry domain.LogEntry) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	entry.ID = domain.LogEntryID()
+	entry.CreatedAt = now
+	entry.UpdatedAt = now
+
+	item, err := attributevalue.MarshalMap(entry)
+	if err != nil {
+		return fmt.Errorf("marshal log entry: %w", err)
+	}
+
+	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+		TableName: &s.tableName,
+		Item:      item,
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb PutItem: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateLogEntry updates specific fields on a log entry in DynamoDB.
+func (s *BotService) UpdateLogEntry(id string, fields map[string]any) error {
+	if len(fields) == 0 {
+		return fmt.Errorf("no fields provided for update")
+	}
+
+	for key := range fields {
+		if !allowedLogEntryFields[key] {
+			return fmt.Errorf("field %q is not an updatable log entry field", key)
+		}
+	}
+
+	return s.updateItem("log#"+id, fields)
+}
+
+// DeleteLogEntry removes a log entry from DynamoDB.
+func (s *BotService) DeleteLogEntry(id string) error {
+	_, err := s.client.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: "log#" + id},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb DeleteItem: %w", err)
+	}
+	return nil
+}
+
 // --- Shared Helpers ---
 
 // updateItem builds and executes a DynamoDB UpdateItem with SET expression.

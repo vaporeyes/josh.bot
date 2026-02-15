@@ -376,6 +376,85 @@ func (a *Adapter) DeleteTILHandler(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, http.StatusOK)
 }
 
+func (a *Adapter) LogEntriesHandler(w http.ResponseWriter, r *http.Request) {
+	tag := r.URL.Query().Get("tag")
+	entries, err := a.service.GetLogEntries(tag)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, entries)
+}
+
+func (a *Adapter) CreateLogEntryHandler(w http.ResponseWriter, r *http.Request) {
+	var entry domain.LogEntry
+	if err := json.NewDecoder(r.Body).Decode(&entry); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.CreateLogEntry(entry); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusCreated)
+}
+
+// LogEntryHandler handles GET /v1/log/{id}.
+func (a *Adapter) LogEntryHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/log/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	entry, err := a.service.GetLogEntry(id)
+	if err != nil {
+		http.Error(w, `{"error":"log entry not found"}`, http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, entry)
+}
+
+func (a *Adapter) UpdateLogEntryHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/log/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var fields map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.UpdateLogEntry(id, fields); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
+func (a *Adapter) DeleteLogEntryHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/log/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.DeleteLogEntry(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
 // writeJSON encodes val as JSON and writes it to the response.
 func writeJSON(w http.ResponseWriter, statusCode int, val any) {
 	w.Header().Set("Content-Type", "application/json")

@@ -88,6 +88,22 @@ func TILID() string {
 	return "til#" + hex.EncodeToString(b)
 }
 
+// LogEntry represents a timestamped activity/event log entry.
+type LogEntry struct {
+	ID        string   `json:"id" dynamodbav:"id"`
+	Message   string   `json:"message" dynamodbav:"message"`
+	Tags      []string `json:"tags" dynamodbav:"tags"`
+	CreatedAt string   `json:"created_at" dynamodbav:"created_at"`
+	UpdatedAt string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
+}
+
+// LogEntryID generates a random ID with a "log#" prefix.
+func LogEntryID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return "log#" + hex.EncodeToString(b)
+}
+
 // Lift represents a single set within a workout.
 type Lift struct {
 	ID           string  `json:"id" dynamodbav:"id"`
@@ -153,4 +169,9 @@ type BotService interface {
 	CreateTIL(til TIL) error
 	UpdateTIL(id string, fields map[string]any) error
 	DeleteTIL(id string) error
+	GetLogEntries(tag string) ([]LogEntry, error)
+	GetLogEntry(id string) (LogEntry, error)
+	CreateLogEntry(entry LogEntry) error
+	UpdateLogEntry(id string, fields map[string]any) error
+	DeleteLogEntry(id string) error
 }

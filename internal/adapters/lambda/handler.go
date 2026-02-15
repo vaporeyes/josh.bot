@@ -70,6 +70,11 @@ func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayPr
 	case strings.HasPrefix(req.Path, "/v1/til/"):
 		id := strings.TrimPrefix(req.Path, "/v1/til/")
 		return a.handleTIL(req, id)
+	case req.Path == "/v1/log":
+		return a.handleLogEntries(req)
+	case strings.HasPrefix(req.Path, "/v1/log/"):
+		id := strings.TrimPrefix(req.Path, "/v1/log/")
+		return a.handleLogEntry(req, id)
 	default:
 		return jsonResponse(404, `{"error":"not found"}`), nil
 	}
@@ -371,6 +376,71 @@ func (a *Adapter) handleTIL(req events.APIGatewayProxyRequest, id string) (event
 
 	case "DELETE":
 		if err := a.service.DeleteTIL(id); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+}
+
+// handleLogEntries routes GET (list) and POST (create) for /v1/log.
+func (a *Adapter) handleLogEntries(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		tag := req.QueryStringParameters["tag"]
+		entries, err := a.service.GetLogEntries(tag)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		body, err := json.Marshal(entries)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "POST":
+		var entry domain.LogEntry
+		if err := json.Unmarshal([]byte(req.Body), &entry); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.service.CreateLogEntry(entry); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(201, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+}
+
+// handleLogEntry routes GET, PUT, DELETE for /v1/log/{id}.
+func (a *Adapter) handleLogEntry(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		entry, err := a.service.GetLogEntry(id)
+		if err != nil {
+			return jsonResponse(404, `{"error":"log entry not found"}`), nil
+		}
+		body, err := json.Marshal(entry)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "PUT":
+		var fields map[string]any
+		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.service.UpdateLogEntry(id, fields); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	case "DELETE":
+		if err := a.service.DeleteLogEntry(id); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil

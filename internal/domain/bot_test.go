@@ -1,5 +1,5 @@
 // ABOUTME: This file contains tests for domain helper functions.
-// ABOUTME: Tests ExerciseSlug, CompactDate, Lift ID, Note ID, and TIL ID generation.
+// ABOUTME: Tests ExerciseSlug, CompactDate, Lift ID, Note ID, TIL ID, and LogEntry ID generation.
 package domain
 
 import (
@@ -218,5 +218,24 @@ func TestTILID_Unique(t *testing.T) {
 	b := TILID()
 	if a == b {
 		t.Errorf("two TILID calls should produce different IDs: %q == %q", a, b)
+	}
+}
+
+func TestLogEntryID_Format(t *testing.T) {
+	id := LogEntryID()
+	if !strings.HasPrefix(id, "log#") {
+		t.Errorf("LogEntryID should start with 'log#', got %q", id)
+	}
+	// "log#" (4 chars) + 16 hex chars (8 bytes) = 20 chars total
+	if len(id) != 20 {
+		t.Errorf("LogEntryID length should be 20, got %d for %q", len(id), id)
+	}
+}
+
+func TestLogEntryID_Unique(t *testing.T) {
+	a := LogEntryID()
+	b := LogEntryID()
+	if a == b {
+		t.Errorf("two LogEntryID calls should produce different IDs: %q == %q", a, b)
 	}
 }

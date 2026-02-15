@@ -215,6 +215,53 @@ func (s *BotService) DeleteTIL(id string) error {
 	return nil
 }
 
+// GetLogEntries returns hardcoded log entries, optionally filtered by tag.
+func (s *BotService) GetLogEntries(tag string) ([]domain.LogEntry, error) {
+	entries := []domain.LogEntry{
+		{ID: "log#abc123", Message: "deployed josh-bot v1.2", Tags: []string{"deploy"}},
+		{ID: "log#def456", Message: "updated DNS for josh.bot", Tags: []string{"infra"}},
+	}
+	if tag == "" {
+		return entries, nil
+	}
+	var filtered []domain.LogEntry
+	for _, e := range entries {
+		for _, t := range e.Tags {
+			if t == tag {
+				filtered = append(filtered, e)
+				break
+			}
+		}
+	}
+	return filtered, nil
+}
+
+// GetLogEntry returns a hardcoded log entry by ID.
+func (s *BotService) GetLogEntry(id string) (domain.LogEntry, error) {
+	entries, _ := s.GetLogEntries("")
+	for _, e := range entries {
+		if e.ID == id {
+			return e, nil
+		}
+	}
+	return domain.LogEntry{}, fmt.Errorf("log entry %q not found", id)
+}
+
+// CreateLogEntry is a no-op in the mock adapter.
+func (s *BotService) CreateLogEntry(entry domain.LogEntry) error {
+	return nil
+}
+
+// UpdateLogEntry is a no-op in the mock adapter.
+func (s *BotService) UpdateLogEntry(id string, fields map[string]any) error {
+	return nil
+}
+
+// DeleteLogEntry is a no-op in the mock adapter.
+func (s *BotService) DeleteLogEntry(id string) error {
+	return nil
+}
+
 // MetricsService is a mock implementation of domain.MetricsService.
 type MetricsService struct{}
 

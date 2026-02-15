@@ -973,3 +973,191 @@ func TestDeleteTIL_DynamoDBError(t *testing.T) {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
 }
+
+// --- Log Entry Tests ---
+
+func TestGetLogEntries_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		scanOutput: &dynamodb.ScanOutput{
+			Items: []map[string]types.AttributeValue{
+				{
+					"id":      &types.AttributeValueMemberS{Value: "log#abc123"},
+					"message": &types.AttributeValueMemberS{Value: "deployed josh-bot v1.2"},
+					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+						&types.AttributeValueMemberS{Value: "deploy"},
+					}},
+				},
+				{
+					"id":      &types.AttributeValueMemberS{Value: "log#def456"},
+					"message": &types.AttributeValueMemberS{Value: "updated DNS for josh.bot"},
+					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+						&types.AttributeValueMemberS{Value: "infra"},
+					}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	entries, err := svc.GetLogEntries("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	if entries[0].Message != "deployed josh-bot v1.2" {
+		t.Errorf("expected message 'deployed josh-bot v1.2', got '%s'", entries[0].Message)
+	}
+}
+
+func TestGetLogEntries_FilterByTag(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		scanOutput: &dynamodb.ScanOutput{
+			Items: []map[string]types.AttributeValue{
+				{
+					"id":      &types.AttributeValueMemberS{Value: "log#abc123"},
+					"message": &types.AttributeValueMemberS{Value: "deployed josh-bot v1.2"},
+					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+						&types.AttributeValueMemberS{Value: "deploy"},
+					}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	entries, err := svc.GetLogEntries("deploy")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if mock.scanInput == nil {
+		t.Fatal("expected Scan to be called")
+	}
+	filterExpr := *mock.scanInput.FilterExpression
+	if !strings.Contains(filterExpr, "contains") {
+		t.Errorf("expected filter expression to contain 'contains', got '%s'", filterExpr)
+	}
+}
+
+func TestGetLogEntry_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"id":      &types.AttributeValueMemberS{Value: "log#abc123"},
+				"message": &types.AttributeValueMemberS{Value: "deployed josh-bot v1.2"},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	entry, err := svc.GetLogEntry("abc123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if entry.Message != "deployed josh-bot v1.2" {
+		t.Errorf("expected message 'deployed josh-bot v1.2', got '%s'", entry.Message)
+	}
+}
+
+func TestGetLogEntry_NotFound(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{Item: nil},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetLogEntry("nonexistent")
+	if err == nil {
+		t.Error("expected error for missing log entry, got nil")
+	}
+}
+
+func TestCreateLogEntry_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.CreateLogEntry(domain.LogEntry{
+		Message: "deployed josh-bot v1.2",
+		Tags:    []string{"deploy"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.putInput == nil {
+		t.Fatal("expected PutItem to be called")
+	}
+	idAttr, ok := mock.putInput.Item["id"]
+	if !ok {
+		t.Fatal("expected 'id' in put item")
+	}
+	idVal := idAttr.(*types.AttributeValueMemberS).Value
+	if !strings.HasPrefix(idVal, "log#") {
+		t.Errorf("expected id to start with 'log#', got '%s'", idVal)
+	}
+}
+
+func TestCreateLogEntry_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.CreateLogEntry(domain.LogEntry{Message: "test"})
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+func TestUpdateLogEntry_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateLogEntry("abc123", map[string]any{
+		"message": "deployed josh-bot v1.3",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.updateInput == nil {
+		t.Fatal("expected UpdateItem to be called")
+	}
+	idAttr := mock.updateInput.Key["id"]
+	if idAttr.(*types.AttributeValueMemberS).Value != "log#abc123" {
+		t.Errorf("expected key 'log#abc123', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+}
+
+func TestUpdateLogEntry_InvalidField(t *testing.T) {
+	mock := &mockDynamoDBClient{}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateLogEntry("test", map[string]any{"hacker": "nope"})
+	if err == nil {
+		t.Error("expected error for invalid field, got nil")
+	}
+}
+
+func TestDeleteLogEntry_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.DeleteLogEntry("abc123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.deleteInput == nil {
+		t.Fatal("expected DeleteItem to be called")
+	}
+	idAttr := mock.deleteInput.Key["id"]
+	if idAttr.(*types.AttributeValueMemberS).Value != "log#abc123" {
+		t.Errorf("expected key 'log#abc123', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+}
+
+func TestDeleteLogEntry_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.DeleteLogEntry("test")
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
