@@ -11,15 +11,17 @@ import (
 )
 
 func main() {
-	// Initialize the service
+	// Initialize the services
 	service := mock.NewBotService()
+	metricsService := mock.NewMetricsService()
 
 	// Initialize the HTTP adapter
-	adapter := httpadapter.NewAdapter(service)
+	adapter := httpadapter.NewAdapter(service, metricsService)
 
 	// Register the handlers
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/status", adapter.StatusHandler)
+	mux.HandleFunc("/v1/metrics", adapter.MetricsHandler)
 	mux.HandleFunc("/v1/projects", adapter.ProjectsHandler)
 
 	// Start the server

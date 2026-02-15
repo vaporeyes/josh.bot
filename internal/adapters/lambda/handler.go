@@ -11,19 +11,23 @@ import (
 	"github.com/jduncan/josh-bot/internal/domain"
 )
 
-// Adapter wraps a domain.BotService and handles Lambda API Gateway events.
+// Adapter wraps domain services and handles Lambda API Gateway events.
 type Adapter struct {
-	service domain.BotService
+	service        domain.BotService
+	metricsService domain.MetricsService
 }
 
-// NewAdapter creates a new Lambda adapter for the given service.
-func NewAdapter(service domain.BotService) *Adapter {
-	return &Adapter{service: service}
+// NewAdapter creates a new Lambda adapter for the given services.
+func NewAdapter(service domain.BotService, metricsService domain.MetricsService) *Adapter {
+	return &Adapter{service: service, metricsService: metricsService}
 }
 
 // isPublicRoute returns true for routes that don't require API key auth.
 func isPublicRoute(method, path string) bool {
-	return method == "GET" && path == "/v1/status"
+	if method != "GET" {
+		return false
+	}
+	return path == "/v1/status" || path == "/v1/metrics"
 }
 
 // Router handles API Gateway proxy requests with API key validation.
@@ -49,6 +53,8 @@ func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayPr
 	case strings.HasPrefix(req.Path, "/v1/projects/"):
 		slug := strings.TrimPrefix(req.Path, "/v1/projects/")
 		return a.handleProject(req, slug)
+	case req.Path == "/v1/metrics":
+		return a.handleMetrics(req)
 	case req.Path == "/v1/links":
 		return a.handleLinks(req)
 	case strings.HasPrefix(req.Path, "/v1/links/"):
@@ -57,6 +63,23 @@ func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayPr
 	default:
 		return jsonResponse(404, `{"error":"not found"}`), nil
 	}
+}
+
+// handleMetrics handles GET /v1/metrics.
+func (a *Adapter) handleMetrics(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if req.HTTPMethod != "GET" {
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+
+	metrics, err := a.metricsService.GetMetrics()
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	body, err := json.Marshal(metrics)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	return jsonResponse(200, string(body)), nil
 }
 
 // handleStatus routes GET and PUT for /v1/status.

@@ -20,6 +20,11 @@ func main() {
 		log.Fatal("TABLE_NAME environment variable is required")
 	}
 
+	liftsTableName := os.Getenv("LIFTS_TABLE_NAME")
+	if liftsTableName == "" {
+		log.Fatal("LIFTS_TABLE_NAME environment variable is required")
+	}
+
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
 		log.Fatalf("unable to load AWS config: %v", err)
@@ -27,6 +32,7 @@ func main() {
 
 	client := dynamodb.NewFromConfig(cfg)
 	service := dynamodbadapter.NewBotService(client, tableName)
-	adapter := lambdaadapter.NewAdapter(service)
+	metricsService := dynamodbadapter.NewMetricsService(client, liftsTableName, tableName)
+	adapter := lambdaadapter.NewAdapter(service, metricsService)
 	lambda.Start(adapter.Router)
 }

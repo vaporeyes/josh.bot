@@ -107,6 +107,16 @@ tasks:
     cmds:
       - ./scripts/seed-links.sh
 
+  import:lifts:
+    desc: "Import workout CSV into DynamoDB (usage: task import:lifts -- /path/to/export.csv)"
+    cmds:
+      - go run cmd/import-lifts/main.go {{.CLI_ARGS}}
+
+  import:lifts:dry-run:
+    desc: Parse workout CSV and show stats without writing
+    cmds:
+      - go run cmd/import-lifts/main.go --dry-run {{.CLI_ARGS}}
+
   seed:
     desc: Seed all data into DynamoDB
     deps: [seed:status, seed:projects, seed:links]

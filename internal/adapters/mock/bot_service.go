@@ -4,6 +4,7 @@ package mock
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jduncan/josh-bot/internal/domain"
 )
@@ -118,4 +119,28 @@ func (s *BotService) UpdateLink(id string, fields map[string]any) error {
 // DeleteLink is a no-op in the mock adapter.
 func (s *BotService) DeleteLink(id string) error {
 	return nil
+}
+
+// MetricsService is a mock implementation of domain.MetricsService.
+type MetricsService struct{}
+
+// NewMetricsService creates a new mock MetricsService.
+func NewMetricsService() *MetricsService {
+	return &MetricsService{}
+}
+
+// GetMetrics returns hardcoded metrics for testing.
+func (s *MetricsService) GetMetrics() (domain.MetricsResponse, error) {
+	return domain.MetricsResponse{
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Human: domain.HumanMetrics{
+			Focus:            "Powerlifting / Hypertrophy",
+			WeeklyTonnageLbs: 42500,
+			Estimated1RM: map[string]int{
+				"deadlift": 525,
+				"squat":    455,
+				"bench":    315,
+			},
+		},
+	}, nil
 }

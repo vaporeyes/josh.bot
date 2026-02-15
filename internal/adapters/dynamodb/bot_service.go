@@ -29,6 +29,7 @@ var allowedStatusFields = map[string]bool{
 	"current_activity": true, "location": true,
 	"availability": true, "status": true,
 	"links": true, "interests": true,
+	"focus": true,
 }
 
 // allowedProjectFields defines which project fields can be updated via PUT.

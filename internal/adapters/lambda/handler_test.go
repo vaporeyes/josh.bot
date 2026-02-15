@@ -15,7 +15,7 @@ import (
 func TestRouter_ValidAPIKey(t *testing.T) {
 	t.Setenv("API_KEY", "test-secret-key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "GET",
 		Path:       "/v1/status",
@@ -34,7 +34,7 @@ func TestRouter_ValidAPIKey(t *testing.T) {
 func TestRouter_InvalidAPIKey_ProtectedRoute(t *testing.T) {
 	t.Setenv("API_KEY", "test-secret-key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "PUT",
 		Path:       "/v1/status",
@@ -54,7 +54,7 @@ func TestRouter_InvalidAPIKey_ProtectedRoute(t *testing.T) {
 func TestRouter_MissingAPIKey_ProtectedRoute(t *testing.T) {
 	t.Setenv("API_KEY", "test-secret-key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "PUT",
 		Path:       "/v1/status",
@@ -74,7 +74,7 @@ func TestRouter_MissingAPIKey_ProtectedRoute(t *testing.T) {
 func TestRouter_GetStatus_NoAPIKey_PublicRoute(t *testing.T) {
 	t.Setenv("API_KEY", "test-secret-key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "GET",
 		Path:       "/v1/status",
@@ -93,7 +93,7 @@ func TestRouter_GetStatus_NoAPIKey_PublicRoute(t *testing.T) {
 func TestRouter_NoAPIKeyConfigured(t *testing.T) {
 	t.Setenv("API_KEY", "")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "GET",
 		Path:       "/v1/status",
@@ -112,7 +112,7 @@ func TestRouter_NoAPIKeyConfigured(t *testing.T) {
 func TestRouter_StatusEndpoint(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "GET",
 		Path:       "/v1/status",
@@ -149,7 +149,7 @@ func TestRouter_StatusEndpoint(t *testing.T) {
 func TestRouter_ProjectsEndpoint(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "GET",
 		Path:       "/v1/projects",
@@ -171,7 +171,7 @@ func TestRouter_ProjectsEndpoint(t *testing.T) {
 func TestRouter_PutStatus_Success(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "PUT",
 		Path:       "/v1/status",
@@ -191,7 +191,7 @@ func TestRouter_PutStatus_Success(t *testing.T) {
 func TestRouter_PutStatus_InvalidJSON(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "PUT",
 		Path:       "/v1/status",
@@ -211,7 +211,7 @@ func TestRouter_PutStatus_InvalidJSON(t *testing.T) {
 func TestRouter_PostStatus_MethodNotAllowed(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "POST",
 		Path:       "/v1/status",
@@ -231,7 +231,7 @@ func TestRouter_PostStatus_MethodNotAllowed(t *testing.T) {
 func TestRouter_PutProjects_MethodNotAllowed(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "PUT",
 		Path:       "/v1/projects",
@@ -250,7 +250,7 @@ func TestRouter_PutProjects_MethodNotAllowed(t *testing.T) {
 func TestRouter_PostProject_Success(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "POST",
 		Path:       "/v1/projects",
@@ -270,7 +270,7 @@ func TestRouter_PostProject_Success(t *testing.T) {
 func TestRouter_PostProject_InvalidJSON(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "POST",
 		Path:       "/v1/projects",
@@ -290,7 +290,7 @@ func TestRouter_PostProject_InvalidJSON(t *testing.T) {
 func TestRouter_GetProject_Success(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "GET",
 		Path:       "/v1/projects/modular-aws-backend",
@@ -317,7 +317,7 @@ func TestRouter_GetProject_Success(t *testing.T) {
 func TestRouter_PutProject_Success(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "PUT",
 		Path:       "/v1/projects/modular-aws-backend",
@@ -337,7 +337,7 @@ func TestRouter_PutProject_Success(t *testing.T) {
 func TestRouter_DeleteProject_Success(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "DELETE",
 		Path:       "/v1/projects/modular-aws-backend",
@@ -356,7 +356,7 @@ func TestRouter_DeleteProject_Success(t *testing.T) {
 func TestRouter_GetLinks_Success(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "GET",
 		Path:       "/v1/links",
@@ -378,7 +378,7 @@ func TestRouter_GetLinks_Success(t *testing.T) {
 func TestRouter_GetLinks_FilterByTag(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod:            "GET",
 		Path:                  "/v1/links",
@@ -404,7 +404,7 @@ func TestRouter_GetLinks_FilterByTag(t *testing.T) {
 func TestRouter_PostLink_Success(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "POST",
 		Path:       "/v1/links",
@@ -424,7 +424,7 @@ func TestRouter_PostLink_Success(t *testing.T) {
 func TestRouter_PostLink_InvalidJSON(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "POST",
 		Path:       "/v1/links",
@@ -444,7 +444,7 @@ func TestRouter_PostLink_InvalidJSON(t *testing.T) {
 func TestRouter_GetLink_Success(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "GET",
 		Path:       "/v1/links/a1b2c3d4e5f6",
@@ -463,7 +463,7 @@ func TestRouter_GetLink_Success(t *testing.T) {
 func TestRouter_PutLink_Success(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "PUT",
 		Path:       "/v1/links/a1b2c3d4e5f6",
@@ -483,7 +483,7 @@ func TestRouter_PutLink_Success(t *testing.T) {
 func TestRouter_DeleteLink_Success(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "DELETE",
 		Path:       "/v1/links/a1b2c3d4e5f6",
@@ -502,7 +502,7 @@ func TestRouter_DeleteLink_Success(t *testing.T) {
 func TestRouter_NotFound(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 
-	adapter := NewAdapter(mock.NewBotService())
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService())
 	req := events.APIGatewayProxyRequest{
 		HTTPMethod: "GET",
 		Path:       "/v1/unknown",

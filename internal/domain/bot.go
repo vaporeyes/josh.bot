@@ -5,6 +5,9 @@ package domain
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"regexp"
+	"strings"
 )
 
 // Status represents the current state of the bot and its owner.
@@ -47,6 +50,47 @@ type Link struct {
 func LinkIDFromURL(rawURL string) string {
 	h := sha256.Sum256([]byte(rawURL))
 	return hex.EncodeToString(h[:6])
+}
+
+// Lift represents a single set within a workout.
+type Lift struct {
+	ID           string  `json:"id" dynamodbav:"id"`
+	Date         string  `json:"date" dynamodbav:"date"`
+	WorkoutName  string  `json:"workout_name" dynamodbav:"workout_name"`
+	Duration     string  `json:"duration" dynamodbav:"duration"`
+	ExerciseName string  `json:"exercise_name" dynamodbav:"exercise_name"`
+	SetOrder     string  `json:"set_order" dynamodbav:"set_order"`
+	Weight       float64 `json:"weight" dynamodbav:"weight"`
+	Reps         float64 `json:"reps" dynamodbav:"reps"`
+	Distance     float64 `json:"distance" dynamodbav:"distance"`
+	Seconds      float64 `json:"seconds" dynamodbav:"seconds"`
+	RPE          float64 `json:"rpe,omitempty" dynamodbav:"rpe,omitempty"`
+}
+
+// slugRegexp matches one or more non-alphanumeric characters for slug generation.
+var slugRegexp = regexp.MustCompile(`[^a-z0-9]+`)
+
+// ExerciseSlug normalizes an exercise name to a URL-safe slug.
+// "Squat (Barbell)" -> "squat-barbell"
+func ExerciseSlug(name string) string {
+	lower := strings.ToLower(name)
+	slug := slugRegexp.ReplaceAllString(lower, "-")
+	return strings.Trim(slug, "-")
+}
+
+// CompactDate converts a CSV date "2022-05-11 04:20:50" to compact "20220511T042050".
+func CompactDate(csvDate string) string {
+	d := strings.ReplaceAll(csvDate, "-", "")
+	d = strings.Replace(d, " ", "T", 1)
+	d = strings.ReplaceAll(d, ":", "")
+	return d
+}
+
+// LiftID generates a deterministic DynamoDB key from workout set data.
+// AIDEV-NOTE: Deterministic IDs make CSV re-imports idempotent (PutItem overwrites).
+// SetOrder can be numeric ("1") or a marker like "W" (warmup) or "F" (failure).
+func LiftID(date string, exerciseName string, setOrder string) string {
+	return fmt.Sprintf("lift#%s#%s#%s", CompactDate(date), ExerciseSlug(exerciseName), strings.ToLower(setOrder))
 }
 
 // BotService is the interface that defines the operations for the bot.

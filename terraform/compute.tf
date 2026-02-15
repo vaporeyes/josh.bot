@@ -13,9 +13,10 @@ resource "aws_lambda_function" "josh_bot_api" {
 
   environment {
     variables = {
-      APP_ENV    = "production"
-      API_KEY    = random_password.api_key.result
-      TABLE_NAME = aws_dynamodb_table.josh_bot_data.name
+      APP_ENV          = "production"
+      API_KEY          = random_password.api_key.result
+      TABLE_NAME       = aws_dynamodb_table.josh_bot_data.name
+      LIFTS_TABLE_NAME = aws_dynamodb_table.josh_bot_lifts.name
     }
   }
 }
@@ -68,7 +69,30 @@ resource "aws_dynamodb_table" "josh_bot_data" {
   }
 }
 
-# 7. API Key (generated and stored in SSM, passed to Lambda as env var)
+# 7. DynamoDB table for lift/workout data (separate from main data table)
+resource "aws_dynamodb_table" "josh_bot_lifts" {
+  name         = "josh-bot-lifts"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+
+  attribute {
+    name = "date"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "date-index"
+    hash_key        = "date"
+    projection_type = "ALL"
+  }
+}
+
+# 8. API Key (generated and stored in SSM, passed to Lambda as env var)
 resource "random_password" "api_key" {
   length  = 40
   special = false

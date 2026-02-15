@@ -38,8 +38,11 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
           "dynamodb:PutItem",
           "dynamodb:DeleteItem",
         ]
-        Effect   = "Allow"
-        Resource = aws_dynamodb_table.josh_bot_data.arn
+        Effect = "Allow"
+        Resource = [
+          aws_dynamodb_table.josh_bot_data.arn,
+          aws_dynamodb_table.josh_bot_lifts.arn,
+        ]
       }
     ]
   })

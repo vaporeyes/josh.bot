@@ -12,11 +12,28 @@ import (
 )
 
 type Adapter struct {
-	service domain.BotService
+	service        domain.BotService
+	metricsService domain.MetricsService
 }
 
-func NewAdapter(service domain.BotService) *Adapter {
-	return &Adapter{service: service}
+func NewAdapter(service domain.BotService, metricsService domain.MetricsService) *Adapter {
+	return &Adapter{service: service, metricsService: metricsService}
+}
+
+// MetricsHandler handles GET /v1/metrics.
+func (a *Adapter) MetricsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	metrics, err := a.metricsService.GetMetrics()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, metrics)
 }
 
 func (a *Adapter) StatusHandler(w http.ResponseWriter, r *http.Request) {
