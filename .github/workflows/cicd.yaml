@@ -83,7 +83,7 @@ jobs:
         run: |
           terraform -chdir=terraform init \
             -backend-config="bucket=${{ secrets.TERRAFORM_BUCKET }}" \
-            -backend-config="key=${{ github.event.repository.name }}/terraform.tfstate" \
+            -backend-config="key=terraform.tfstate" \
             -backend-config="region=us-east-1"
 
       - name: Terraform Apply
