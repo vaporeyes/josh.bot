@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - 'README.md'
+      - "README.md"
 
 permissions:
   id-token: write # Required for requesting the JWT
@@ -59,7 +59,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. Setup Go and Build the Binary
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -71,19 +70,24 @@ jobs:
           GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap cmd/lambda/main.go
           zip terraform/function.zip bootstrap
 
-      # 2. Authenticate with AWS via OIDC
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GithubOIDCAdmin
           aws-region: us-east-1
 
-      # 3. Terraform Orchestration
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init
-        run: terraform -chdir=terraform init -backend-config="bucket=jduncanz-terraform-state-bucket" -backend-config="key=terraform.tfstate" -backend-config="region=us-east-1"
+        run: |
+          terraform -chdir=terraform init \
+            -backend-config="bucket=${{ secrets.TERRAFORM_BUCKET }}" \
+            -backend-config="key=terraform.tfstate" \
+            -backend-config="region=us-east-1"
 
       - name: Terraform Apply
-        run: terraform -chdir=terraform apply -auto-approve -input=false -var="bucket_name=${{ secrets.TERRAFORM_BUCKET }}"
+        run: |
+          terraform -chdir=terraform apply \
+            -auto-approve -input=false \
+            -var="bucket_name=${{ secrets.TERRAFORM_BUCKET }}"

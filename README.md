@@ -1,6 +1,6 @@
 # josh.bot
 
-A personal API-first platform for Josh, accessible at [josh.bot](https://josh.bot). Built as a cloud-native backend that powers [k8-one](https://k8-one.com) (Josh's AI agent on Slack) with real-time status, project tracking, link management, notes, TILs, activity logging, and fitness metrics.
+A personal API-first platform for Josh, accessible at [josh.bot](https://josh.bot). Built as a cloud-native backend that powers [k8-one](https://k8-one.com) (Josh's AI agent on Slack) with real-time status, project tracking, link management, notes, TILs, activity logging, fitness metrics, and development memory (claude-mem observations, summaries, and prompts).
 
 ## Architecture
 
@@ -11,6 +11,8 @@ cmd/
   api/            Local dev server (mock data, no auth)
   lambda/         Production entrypoint (DynamoDB, API key auth)
   import-lifts/   CLI tool for importing Strong app workout CSV exports
+  export-links/   CLI tool for exporting links with tag/date filters (JSON or URL-only)
+  sync-mem/       CLI tool for syncing claude-mem SQLite to DynamoDB
 internal/
   domain/         Core types, service interfaces, and calculation helpers
   adapters/
@@ -38,6 +40,16 @@ Uses DynamoDB **single-table design** with the `id` partition key and prefixed k
 Link IDs are derived from the URL via SHA256, giving automatic deduplication -- saving the same URL twice updates the existing entry. Notes, TILs, and log entries use random 8-byte hex IDs.
 
 Lift/workout data lives in a separate `josh-bot-lifts` table with a `date-index` GSI for time-range queries. Lift IDs are deterministic (date + exercise + set order) making CSV re-imports idempotent.
+
+Development memory (claude-mem) data lives in a separate `josh-bot-mem` table with a `type-index` GSI (partition key: `type`, sort key: `created_at_epoch`):
+
+| Prefix | Example ID | Resource |
+|--------|-----------|----------|
+| `obs#` | `obs#142` | Development observations (decisions, features, bugs) |
+| `summary#` | `summary#85` | Session summaries (what was investigated/completed) |
+| `prompt#` | `prompt#301` | User prompts from coding sessions |
+
+Data is synced from the local claude-mem SQLite database using `cmd/sync-mem`.
 
 ## Getting Started
 
@@ -75,6 +87,10 @@ curl http://localhost:8080/v1/links
 curl http://localhost:8080/v1/notes
 curl http://localhost:8080/v1/til
 curl http://localhost:8080/v1/log
+curl http://localhost:8080/v1/mem/observations
+curl http://localhost:8080/v1/mem/summaries
+curl http://localhost:8080/v1/mem/prompts
+curl http://localhost:8080/v1/mem/stats
 ```
 
 ### Task Runner
@@ -223,6 +239,13 @@ curl https://api.josh.bot/v1/metrics
       "sets": 18,
       "tonnage_lbs": 12500
     }
+  },
+  "dev": {
+    "total_observations": 150,
+    "total_summaries": 30,
+    "total_prompts": 75,
+    "by_type": { "decision": 45, "feature": 60, "bugfix": 25 },
+    "by_project": { "josh.bot": 120, "other": 30 }
   }
 }
 ```
@@ -287,6 +310,75 @@ curl -X POST https://api.josh.bot/v1/log \
 curl -H "x-api-key: <key>" "https://api.josh.bot/v1/log?tag=deploy"
 ```
 
+### Development Memory (claude-mem)
+
+Read-only access to development observations, session summaries, and prompts synced from the claude-mem database.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/v1/mem/observations` | Yes | List observations (optional `?type=` and `?project=` filters) |
+| GET | `/v1/mem/observations/{id}` | Yes | Get a single observation |
+| GET | `/v1/mem/summaries` | Yes | List session summaries (optional `?project=` filter) |
+| GET | `/v1/mem/summaries/{id}` | Yes | Get a single summary |
+| GET | `/v1/mem/prompts` | Yes | List user prompts |
+| GET | `/v1/mem/prompts/{id}` | Yes | Get a single prompt |
+| GET | `/v1/mem/stats` | Yes | Aggregate counts by type and project |
+
+```bash
+# List all observations
+curl -H "x-api-key: <key>" https://api.josh.bot/v1/mem/observations
+
+# Filter observations by type
+curl -H "x-api-key: <key>" "https://api.josh.bot/v1/mem/observations?type=decision"
+
+# Filter observations by project
+curl -H "x-api-key: <key>" "https://api.josh.bot/v1/mem/observations?type=feature&project=josh.bot"
+
+# Get session summaries
+curl -H "x-api-key: <key>" https://api.josh.bot/v1/mem/summaries
+
+# Get aggregate stats
+curl -H "x-api-key: <key>" https://api.josh.bot/v1/mem/stats
+```
+
+### CLI Tools
+
+#### export-links
+
+Export links from DynamoDB with filtering for ArchiveBox or other tools.
+
+```bash
+# Export all links as JSON
+go run cmd/export-links/main.go
+
+# Export URLs only (for piping to ArchiveBox)
+go run cmd/export-links/main.go --urls-only
+
+# Filter by tag
+go run cmd/export-links/main.go --tag=go
+
+# Filter by date range
+go run cmd/export-links/main.go --since=2026-01-01
+```
+
+#### sync-mem
+
+Sync claude-mem SQLite data to the `josh-bot-mem` DynamoDB table.
+
+```bash
+# Full sync (all observations, summaries, prompts)
+go run cmd/sync-mem/main.go
+
+# Dry run (show what would be synced)
+go run cmd/sync-mem/main.go --dry-run
+
+# Incremental sync (only records after a timestamp)
+go run cmd/sync-mem/main.go --since="2026-02-01 00:00:00"
+
+# Filter by project
+go run cmd/sync-mem/main.go --project=josh.bot
+```
+
 ## Infrastructure
 
 Managed with Terraform in the `terraform/` directory:
@@ -297,6 +389,7 @@ Managed with Terraform in the `terraform/` directory:
 | **API Gateway** (HTTP API) | Routes requests to Lambda (10 rps / 20 burst rate limit, default endpoint disabled) |
 | **DynamoDB** `josh-bot-data` (PAY_PER_REQUEST) | Single-table store for status, projects, links, notes, TILs, log entries |
 | **DynamoDB** `josh-bot-lifts` (PAY_PER_REQUEST) | Workout/lift data with `date-index` GSI |
+| **DynamoDB** `josh-bot-mem` (PAY_PER_REQUEST) | Claude-mem data (observations, summaries, prompts) with `type-index` GSI |
 | **ACM + Route53** | Custom domain (`api.josh.bot`) with TLS 1.2 |
 | **SSM Parameter Store** | Stores the generated API key |
 | **IAM** | Lambda execution role with scoped DynamoDB permissions |
