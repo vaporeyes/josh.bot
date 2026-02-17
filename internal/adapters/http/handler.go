@@ -456,6 +456,88 @@ func (a *Adapter) DeleteLogEntryHandler(w http.ResponseWriter, r *http.Request) 
 	writeOK(w, http.StatusOK)
 }
 
+// DiaryEntriesHandler handles GET /v1/diary (list diary entries).
+func (a *Adapter) DiaryEntriesHandler(w http.ResponseWriter, r *http.Request) {
+	tag := r.URL.Query().Get("tag")
+	entries, err := a.service.GetDiaryEntries(tag)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, entries)
+}
+
+// CreateDiaryEntryHandler handles POST /v1/diary (create diary entry).
+func (a *Adapter) CreateDiaryEntryHandler(w http.ResponseWriter, r *http.Request) {
+	var entry domain.DiaryEntry
+	if err := json.NewDecoder(r.Body).Decode(&entry); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.CreateDiaryEntry(entry); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusCreated)
+}
+
+// DiaryEntryHandler handles GET /v1/diary/{id}.
+func (a *Adapter) DiaryEntryHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/diary/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	entry, err := a.service.GetDiaryEntry(id)
+	if err != nil {
+		http.Error(w, `{"error":"diary entry not found"}`, http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, entry)
+}
+
+// UpdateDiaryEntryHandler handles PUT /v1/diary/{id}.
+func (a *Adapter) UpdateDiaryEntryHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/diary/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var fields map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.UpdateDiaryEntry(id, fields); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
+// DeleteDiaryEntryHandler handles DELETE /v1/diary/{id}.
+func (a *Adapter) DeleteDiaryEntryHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/diary/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.DeleteDiaryEntry(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
 // MemObservationsHandler handles GET /v1/mem/observations.
 func (a *Adapter) MemObservationsHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

@@ -18,6 +18,9 @@ resource "aws_lambda_function" "josh_bot_api" {
       TABLE_NAME       = aws_dynamodb_table.josh_bot_data.name
       LIFTS_TABLE_NAME = aws_dynamodb_table.josh_bot_lifts.name
       MEM_TABLE_NAME   = aws_dynamodb_table.josh_bot_mem.name
+      GITHUB_TOKEN     = var.github_token
+      DIARY_REPO_OWNER = var.diary_repo_owner
+      DIARY_REPO_NAME  = var.diary_repo_name
     }
   }
 }

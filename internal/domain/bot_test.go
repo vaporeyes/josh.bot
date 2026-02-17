@@ -239,3 +239,22 @@ func TestLogEntryID_Unique(t *testing.T) {
 		t.Errorf("two LogEntryID calls should produce different IDs: %q == %q", a, b)
 	}
 }
+
+func TestDiaryEntryID_Format(t *testing.T) {
+	id := DiaryEntryID()
+	if !strings.HasPrefix(id, "diary#") {
+		t.Errorf("DiaryEntryID should start with 'diary#', got %q", id)
+	}
+	// "diary#" (6 chars) + 16 hex chars (8 bytes) = 22 chars total
+	if len(id) != 22 {
+		t.Errorf("DiaryEntryID length should be 22, got %d for %q", len(id), id)
+	}
+}
+
+func TestDiaryEntryID_Unique(t *testing.T) {
+	a := DiaryEntryID()
+	b := DiaryEntryID()
+	if a == b {
+		t.Errorf("two DiaryEntryID calls should produce different IDs: %q == %q", a, b)
+	}
+}

@@ -3,6 +3,7 @@
 package lambda
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"strings"
@@ -16,11 +17,18 @@ type Adapter struct {
 	service        domain.BotService
 	metricsService domain.MetricsService
 	memService     domain.MemService
+	diaryService   domain.DiaryService
 }
 
 // NewAdapter creates a new Lambda adapter for the given services.
 func NewAdapter(service domain.BotService, metricsService domain.MetricsService, memService domain.MemService) *Adapter {
 	return &Adapter{service: service, metricsService: metricsService, memService: memService}
+}
+
+// SetDiaryService sets the diary service for the adapter.
+// AIDEV-NOTE: Separate setter avoids changing NewAdapter signature for all callers.
+func (a *Adapter) SetDiaryService(ds domain.DiaryService) {
+	a.diaryService = ds
 }
 
 // isPublicRoute returns true for routes that don't require API key auth.
@@ -93,6 +101,11 @@ func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayPr
 		return a.handleMemPrompt(req, id)
 	case req.Path == "/v1/mem/stats":
 		return a.handleMemStats(req)
+	case req.Path == "/v1/diary":
+		return a.handleDiaryEntries(req)
+	case strings.HasPrefix(req.Path, "/v1/diary/"):
+		id := strings.TrimPrefix(req.Path, "/v1/diary/")
+		return a.handleDiaryEntry(req, id)
 	default:
 		return jsonResponse(404, `{"error":"not found"}`), nil
 	}
@@ -581,6 +594,82 @@ func (a *Adapter) handleMemStats(req events.APIGatewayProxyRequest) (events.APIG
 		return jsonResponse(500, `{"error":"internal server error"}`), err
 	}
 	return jsonResponse(200, string(body)), nil
+}
+
+// handleDiaryEntries routes GET (list) and POST (create) for /v1/diary.
+func (a *Adapter) handleDiaryEntries(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		tag := req.QueryStringParameters["tag"]
+		entries, err := a.service.GetDiaryEntries(tag)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		body, err := json.Marshal(entries)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "POST":
+		var entry domain.DiaryEntry
+		if err := json.Unmarshal([]byte(req.Body), &entry); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if a.diaryService != nil {
+			result, err := a.diaryService.CreateAndPublish(context.Background(), entry)
+			if err != nil {
+				return jsonResponse(500, `{"error":"internal server error"}`), err
+			}
+			body, err := json.Marshal(result)
+			if err != nil {
+				return jsonResponse(500, `{"error":"internal server error"}`), err
+			}
+			return jsonResponse(201, string(body)), nil
+		}
+		if err := a.service.CreateDiaryEntry(entry); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(201, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+}
+
+// handleDiaryEntry routes GET, PUT, DELETE for /v1/diary/{id}.
+func (a *Adapter) handleDiaryEntry(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		entry, err := a.service.GetDiaryEntry(id)
+		if err != nil {
+			return jsonResponse(404, `{"error":"diary entry not found"}`), nil
+		}
+		body, err := json.Marshal(entry)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "PUT":
+		var fields map[string]any
+		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.service.UpdateDiaryEntry(id, fields); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	case "DELETE":
+		if err := a.service.DeleteDiaryEntry(id); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
 }
 
 func jsonResponse(statusCode int, body string) events.APIGatewayProxyResponse {

@@ -145,6 +145,28 @@ func LiftID(date string, exerciseName string, setOrder string) string {
 	return fmt.Sprintf("lift#%s#%s#%s", CompactDate(date), ExerciseSlug(exerciseName), strings.ToLower(setOrder))
 }
 
+// DiaryEntry represents a structured journal entry with context, reaction, and takeaway.
+// AIDEV-NOTE: Four fields match the journaling spec: Context, Body, Reaction, Takeaway.
+type DiaryEntry struct {
+	ID        string   `json:"id" dynamodbav:"id"`
+	Title     string   `json:"title,omitempty" dynamodbav:"title,omitempty"`
+	Context   string   `json:"context" dynamodbav:"context"`
+	Body      string   `json:"body" dynamodbav:"body"`
+	Reaction  string   `json:"reaction" dynamodbav:"reaction"`
+	Takeaway  string   `json:"takeaway" dynamodbav:"takeaway"`
+	Tags      []string `json:"tags" dynamodbav:"tags"`
+	CreatedAt string   `json:"created_at" dynamodbav:"created_at"`
+	UpdatedAt string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
+}
+
+// DiaryEntryID generates a random ID with a "diary#" prefix.
+// AIDEV-NOTE: Random IDs (not deterministic) since diary entries have no natural dedup key.
+func DiaryEntryID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return "diary#" + hex.EncodeToString(b)
+}
+
 // BotService is the interface that defines the operations for the bot.
 type BotService interface {
 	GetStatus() (Status, error)
@@ -174,4 +196,9 @@ type BotService interface {
 	CreateLogEntry(entry LogEntry) error
 	UpdateLogEntry(id string, fields map[string]any) error
 	DeleteLogEntry(id string) error
+	GetDiaryEntries(tag string) ([]DiaryEntry, error)
+	GetDiaryEntry(id string) (DiaryEntry, error)
+	CreateDiaryEntry(entry DiaryEntry) error
+	UpdateDiaryEntry(id string, fields map[string]any) error
+	DeleteDiaryEntry(id string) error
 }

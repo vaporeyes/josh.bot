@@ -262,6 +262,58 @@ func (s *BotService) DeleteLogEntry(id string) error {
 	return nil
 }
 
+// GetDiaryEntries returns hardcoded diary entries, optionally filtered by tag.
+func (s *BotService) GetDiaryEntries(tag string) ([]domain.DiaryEntry, error) {
+	entries := []domain.DiaryEntry{
+		{
+			ID: "diary#abc123", Title: "A Good Day", Context: "Monday morning",
+			Body: "Shipped the API", Reaction: "Proud", Takeaway: "Ship early",
+			Tags: []string{"work"}, CreatedAt: "2026-02-17T15:00:00Z",
+		},
+	}
+	if tag == "" {
+		return entries, nil
+	}
+	var filtered []domain.DiaryEntry
+	for _, e := range entries {
+		for _, t := range e.Tags {
+			if t == tag {
+				filtered = append(filtered, e)
+				break
+			}
+		}
+	}
+	return filtered, nil
+}
+
+// GetDiaryEntry returns a hardcoded diary entry by ID.
+// AIDEV-NOTE: Matches by "diary#"+id to mirror DynamoDB adapter key construction.
+func (s *BotService) GetDiaryEntry(id string) (domain.DiaryEntry, error) {
+	fullID := "diary#" + id
+	entries, _ := s.GetDiaryEntries("")
+	for _, e := range entries {
+		if e.ID == fullID {
+			return e, nil
+		}
+	}
+	return domain.DiaryEntry{}, fmt.Errorf("diary entry %q not found", id)
+}
+
+// CreateDiaryEntry is a no-op in the mock adapter.
+func (s *BotService) CreateDiaryEntry(entry domain.DiaryEntry) error {
+	return nil
+}
+
+// UpdateDiaryEntry is a no-op in the mock adapter.
+func (s *BotService) UpdateDiaryEntry(id string, fields map[string]any) error {
+	return nil
+}
+
+// DeleteDiaryEntry is a no-op in the mock adapter.
+func (s *BotService) DeleteDiaryEntry(id string) error {
+	return nil
+}
+
 // MetricsService is a mock implementation of domain.MetricsService.
 type MetricsService struct{}
 

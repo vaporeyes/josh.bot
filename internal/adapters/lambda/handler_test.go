@@ -499,6 +499,133 @@ func TestRouter_DeleteLink_Success(t *testing.T) {
 	}
 }
 
+func TestRouter_GetDiaryEntries_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService(), mock.NewMemService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "GET",
+		Path:       "/v1/diary",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Body, "diary#abc123") {
+		t.Errorf("expected diary entry in response: %v", resp.Body)
+	}
+}
+
+func TestRouter_PostDiaryEntry_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService(), mock.NewMemService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/diary",
+		Headers:    map[string]string{"x-api-key": "key"},
+		Body:       `{"context":"Monday morning","body":"Shipped the API","reaction":"Proud","takeaway":"Ship early","tags":["work"]}`,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 201 {
+		t.Errorf("expected 201, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestRouter_PostDiaryEntry_InvalidJSON(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService(), mock.NewMemService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/diary",
+		Headers:    map[string]string{"x-api-key": "key"},
+		Body:       `{bad json`,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 400 {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestRouter_GetDiaryEntry_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService(), mock.NewMemService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "GET",
+		Path:       "/v1/diary/abc123",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d: %s", resp.StatusCode, resp.Body)
+	}
+
+	var entry domain.DiaryEntry
+	if err := json.Unmarshal([]byte(resp.Body), &entry); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if entry.Context != "Monday morning" {
+		t.Errorf("expected context 'Monday morning', got '%s'", entry.Context)
+	}
+}
+
+func TestRouter_GetDiaryEntry_NotFound(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService(), mock.NewMemService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "GET",
+		Path:       "/v1/diary/nonexistent",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 404 {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestRouter_DeleteDiaryEntry_Success(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService(), mock.NewMemService())
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "DELETE",
+		Path:       "/v1/diary/abc123",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
 func TestRouter_NotFound(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 

@@ -656,6 +656,118 @@ func (s *BotService) DeleteLogEntry(id string) error {
 	return nil
 }
 
+// allowedDiaryEntryFields defines which diary entry fields can be updated via PUT.
+var allowedDiaryEntryFields = map[string]bool{
+	"title": true, "context": true, "body": true,
+	"reaction": true, "takeaway": true, "tags": true,
+}
+
+// --- Diary Entry Operations ---
+
+// GetDiaryEntries fetches all diary entries from DynamoDB, optionally filtered by tag.
+func (s *BotService) GetDiaryEntries(tag string) ([]domain.DiaryEntry, error) {
+	filterExpr := "begins_with(id, :prefix)"
+	exprValues := map[string]types.AttributeValue{
+		":prefix": &types.AttributeValueMemberS{Value: "diary#"},
+	}
+
+	if tag != "" {
+		filterExpr += " AND contains(tags, :tag)"
+		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
+	}
+
+	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+		TableName:                 &s.tableName,
+		FilterExpression:          &filterExpr,
+		ExpressionAttributeValues: exprValues,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("dynamodb Scan: %w", err)
+	}
+
+	entries := make([]domain.DiaryEntry, 0, len(output.Items))
+	for _, item := range output.Items {
+		var e domain.DiaryEntry
+		if err := attributevalue.UnmarshalMap(item, &e); err != nil {
+			return nil, fmt.Errorf("unmarshal diary entry: %w", err)
+		}
+		entries = append(entries, e)
+	}
+
+	return entries, nil
+}
+
+// GetDiaryEntry fetches a single diary entry by ID from DynamoDB.
+func (s *BotService) GetDiaryEntry(id string) (domain.DiaryEntry, error) {
+	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: "diary#" + id},
+		},
+	})
+	if err != nil {
+		return domain.DiaryEntry{}, fmt.Errorf("dynamodb GetItem: %w", err)
+	}
+	if output.Item == nil {
+		return domain.DiaryEntry{}, fmt.Errorf("diary entry %q not found", id)
+	}
+
+	var entry domain.DiaryEntry
+	if err := attributevalue.UnmarshalMap(output.Item, &entry); err != nil {
+		return domain.DiaryEntry{}, fmt.Errorf("unmarshal diary entry: %w", err)
+	}
+
+	return entry, nil
+}
+
+// CreateDiaryEntry adds a new diary entry to DynamoDB.
+// AIDEV-NOTE: ID and timestamps are expected to be set by the caller (DiaryService).
+func (s *BotService) CreateDiaryEntry(entry domain.DiaryEntry) error {
+	item, err := attributevalue.MarshalMap(entry)
+	if err != nil {
+		return fmt.Errorf("marshal diary entry: %w", err)
+	}
+
+	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+		TableName: &s.tableName,
+		Item:      item,
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb PutItem: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateDiaryEntry updates specific fields on a diary entry in DynamoDB.
+func (s *BotService) UpdateDiaryEntry(id string, fields map[string]any) error {
+	if len(fields) == 0 {
+		return fmt.Errorf("no fields provided for update")
+	}
+
+	for key := range fields {
+		if !allowedDiaryEntryFields[key] {
+			return fmt.Errorf("field %q is not an updatable diary entry field", key)
+		}
+	}
+
+	return s.updateItem("diary#"+id, fields)
+}
+
+// DeleteDiaryEntry removes a diary entry from DynamoDB.
+func (s *BotService) DeleteDiaryEntry(id string) error {
+	_, err := s.client.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: "diary#" + id},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb DeleteItem: %w", err)
+	}
+	return nil
+}
+
 // --- Shared Helpers ---
 
 // updateItem builds and executes a DynamoDB UpdateItem with SET expression.

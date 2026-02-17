@@ -11,7 +11,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	dynamodbadapter "github.com/jduncan/josh-bot/internal/adapters/dynamodb"
+	ghclient "github.com/jduncan/josh-bot/internal/adapters/github"
 	lambdaadapter "github.com/jduncan/josh-bot/internal/adapters/lambda"
+	diarysvc "github.com/jduncan/josh-bot/internal/service"
 )
 
 func main() {
@@ -40,5 +42,16 @@ func main() {
 	memService := dynamodbadapter.NewMemService(client, memTableName)
 	metricsService := dynamodbadapter.NewMetricsService(client, liftsTableName, tableName, memService)
 	adapter := lambdaadapter.NewAdapter(service, metricsService, memService)
+
+	// Wire up diary service with GitHub publishing if configured
+	ghToken := os.Getenv("GITHUB_TOKEN")
+	ghOwner := os.Getenv("DIARY_REPO_OWNER")
+	ghRepo := os.Getenv("DIARY_REPO_NAME")
+	if ghToken != "" && ghOwner != "" && ghRepo != "" {
+		publisher := ghclient.NewClient(ghToken, ghOwner, ghRepo)
+		diarySvc := diarysvc.NewDiaryService(service, publisher)
+		adapter.SetDiaryService(diarySvc)
+	}
+
 	lambda.Start(adapter.Router)
 }
