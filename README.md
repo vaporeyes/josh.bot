@@ -1,6 +1,6 @@
 # josh.bot
 
-A personal API-first platform for Josh, accessible at [josh.bot](https://josh.bot). Built as a cloud-native backend that powers [k8-one](https://k8-one.com) (Josh's AI agent on Slack) with real-time status, project tracking, link management, notes, TILs, activity logging, fitness metrics, and development memory (claude-mem observations, summaries, and prompts).
+A personal API-first platform for Josh, accessible at [josh.bot](https://josh.bot). Built as a cloud-native backend that powers [k8-one](https://k8-one.com) (Josh's AI agent on Slack) with real-time status, project tracking, link management, notes, TILs, activity logging, structured journaling (with Obsidian sync), fitness metrics, and development memory (claude-mem observations, summaries, and prompts).
 
 ## Architecture
 
@@ -36,8 +36,9 @@ Uses DynamoDB **single-table design** with the `id` partition key and prefixed k
 | `note#` | `note#a1b2c3d4e5f6a1b2` | Notes (random ID) |
 | `til#` | `til#a1b2c3d4e5f6a1b2` | TIL entries (random ID) |
 | `log#` | `log#a1b2c3d4e5f6a1b2` | Activity log entries (random ID) |
+| `diary#` | `diary#a1b2c3d4e5f6a1b2` | Diary/journal entries (random ID) |
 
-Link IDs are derived from the URL via SHA256, giving automatic deduplication -- saving the same URL twice updates the existing entry. Notes, TILs, and log entries use random 8-byte hex IDs.
+Link IDs are derived from the URL via SHA256, giving automatic deduplication -- saving the same URL twice updates the existing entry. Notes, TILs, log entries, and diary entries use random 8-byte hex IDs.
 
 Lift/workout data lives in a separate `josh-bot-lifts` table with a `date-index` GSI for time-range queries. Lift IDs are deterministic (date + exercise + set order) making CSV re-imports idempotent.
 
@@ -87,6 +88,7 @@ curl http://localhost:8080/v1/links
 curl http://localhost:8080/v1/notes
 curl http://localhost:8080/v1/til
 curl http://localhost:8080/v1/log
+curl http://localhost:8080/v1/diary
 curl http://localhost:8080/v1/mem/observations
 curl http://localhost:8080/v1/mem/summaries
 curl http://localhost:8080/v1/mem/prompts
@@ -310,6 +312,68 @@ curl -X POST https://api.josh.bot/v1/log \
 curl -H "x-api-key: <key>" "https://api.josh.bot/v1/log?tag=deploy"
 ```
 
+### Diary
+
+Structured journal entries with four sections: context (setting/date), body (what happened), reaction (honest response), and takeaway (realization/intention). On creation, entries are stored in DynamoDB and optionally published as Obsidian-compatible markdown to a GitHub repo.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/v1/diary` | Yes | List all entries (optional `?tag=` filter) |
+| POST | `/v1/diary` | Yes | Create an entry (stores in DynamoDB + publishes to Obsidian) |
+| GET | `/v1/diary/{id}` | Yes | Get an entry by ID |
+| PUT | `/v1/diary/{id}` | Yes | Partial update (allowed fields: `title`, `context`, `body`, `reaction`, `takeaway`, `tags`) |
+| DELETE | `/v1/diary/{id}` | Yes | Delete an entry |
+
+```bash
+# Create a diary entry
+curl -X POST https://api.josh.bot/v1/diary \
+  -H "x-api-key: <key>" -H "Content-Type: application/json" \
+  -d '{
+    "title": "Shipped the diary endpoint",
+    "context": "Monday evening, home office",
+    "body": "Built the full /v1/diary endpoint with TDD, GitHub publishing, and Obsidian formatting.",
+    "reaction": "Satisfying to see it all click together.",
+    "takeaway": "Hexagonal architecture pays off -- adding a new resource type is mechanical.",
+    "tags": ["work", "josh.bot"]
+  }'
+
+# List all diary entries
+curl -H "x-api-key: <key>" https://api.josh.bot/v1/diary
+
+# Filter by tag
+curl -H "x-api-key: <key>" "https://api.josh.bot/v1/diary?tag=work"
+
+# Get a specific entry
+curl -H "x-api-key: <key>" https://api.josh.bot/v1/diary/a1b2c3d4e5f6a1b2
+
+# Update an entry
+curl -X PUT https://api.josh.bot/v1/diary/a1b2c3d4e5f6a1b2 \
+  -H "x-api-key: <key>" -H "Content-Type: application/json" \
+  -d '{"takeaway": "Revised: hexagonal arch + TDD = fast feature velocity."}'
+
+# Delete an entry
+curl -X DELETE https://api.josh.bot/v1/diary/a1b2c3d4e5f6a1b2 \
+  -H "x-api-key: <key>"
+```
+
+**POST response shape:**
+
+```json
+{
+  "id": "diary#a1b2c3d4e5f6a1b2",
+  "title": "Shipped the diary endpoint",
+  "context": "Monday evening, home office",
+  "body": "Built the full /v1/diary endpoint...",
+  "reaction": "Satisfying to see it all click together.",
+  "takeaway": "Hexagonal architecture pays off...",
+  "tags": ["work", "josh.bot"],
+  "created_at": "2026-02-17T22:30:00Z",
+  "updated_at": "2026-02-17T22:30:00Z"
+}
+```
+
+**Obsidian publishing:** When `GITHUB_TOKEN`, `DIARY_REPO_OWNER`, and `DIARY_REPO_NAME` env vars are set, POST creates a markdown file in the target repo at `diary/YYYY-MM-DD-HHMMSS.md` with YAML frontmatter and structured sections. GitHub publish is best-effort -- if it fails, the DynamoDB entry is still returned.
+
 ### Development Memory (claude-mem)
 
 Read-only access to development observations, session summaries, and prompts synced from the claude-mem database.
@@ -390,7 +454,7 @@ Managed with Terraform in the `terraform/` directory:
 | **DynamoDB** `josh-bot-data` (PAY_PER_REQUEST) | Single-table store for status, projects, links, notes, TILs, log entries |
 | **DynamoDB** `josh-bot-lifts` (PAY_PER_REQUEST) | Workout/lift data with `date-index` GSI |
 | **DynamoDB** `josh-bot-mem` (PAY_PER_REQUEST) | Claude-mem data (observations, summaries, prompts) with `type-index` GSI |
-| **ACM + Route53** | Custom domain (`api.josh.bot`) with TLS 1.2 |
+| **ACM** | TLS certificate for `api.josh.bot` (DNS validation + CNAME managed in Cloudflare) |
 | **SSM Parameter Store** | Stores the generated API key |
 | **IAM** | Lambda execution role with scoped DynamoDB permissions |
 | **S3** | Terraform state backend with native locking |
