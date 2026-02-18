@@ -132,6 +132,59 @@ func (s *MemService) GetPrompt(id string) (domain.MemPrompt, error) {
 	return domain.MemPrompt{}, fmt.Errorf("prompt %q not found", id)
 }
 
+// GetMemories returns hardcoded memories, optionally filtered by category.
+func (s *MemService) GetMemories(category string) ([]domain.Memory, error) {
+	memories := []domain.Memory{
+		{
+			ID:             "mem#abc12345",
+			Type:           "memory",
+			Content:        "k8-one prefers Go for backend services",
+			Category:       "preference",
+			Tags:           []string{"coding", "go"},
+			Source:         "manual",
+			CreatedAt:      "2026-02-15T12:00:00Z",
+			CreatedAtEpoch: 1739620800,
+		},
+	}
+
+	if category == "" {
+		return memories, nil
+	}
+	var filtered []domain.Memory
+	for _, m := range memories {
+		if m.Category == category {
+			filtered = append(filtered, m)
+		}
+	}
+	return filtered, nil
+}
+
+// GetMemory returns a hardcoded memory by ID.
+func (s *MemService) GetMemory(id string) (domain.Memory, error) {
+	memories, _ := s.GetMemories("")
+	for _, m := range memories {
+		if m.ID == id || m.ID == "mem#"+id {
+			return m, nil
+		}
+	}
+	return domain.Memory{}, fmt.Errorf("memory %q not found", id)
+}
+
+// CreateMemory is a no-op mock for creating memories.
+func (s *MemService) CreateMemory(memory domain.Memory) error {
+	return nil
+}
+
+// UpdateMemory is a no-op mock for updating memories.
+func (s *MemService) UpdateMemory(id string, fields map[string]any) error {
+	return nil
+}
+
+// DeleteMemory is a no-op mock for deleting memories.
+func (s *MemService) DeleteMemory(id string) error {
+	return nil
+}
+
 // GetStats returns hardcoded aggregate stats.
 func (s *MemService) GetStats() (domain.MemStats, error) {
 	return domain.MemStats{

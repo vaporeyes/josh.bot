@@ -106,6 +106,11 @@ func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayPr
 	case strings.HasPrefix(req.Path, "/v1/diary/"):
 		id := strings.TrimPrefix(req.Path, "/v1/diary/")
 		return a.handleDiaryEntry(req, id)
+	case req.Path == "/v1/memory":
+		return a.handleMemories(req)
+	case strings.HasPrefix(req.Path, "/v1/memory/"):
+		id := strings.TrimPrefix(req.Path, "/v1/memory/")
+		return a.handleMemory(req, id)
 	default:
 		return jsonResponse(404, `{"error":"not found"}`), nil
 	}
@@ -663,6 +668,71 @@ func (a *Adapter) handleDiaryEntry(req events.APIGatewayProxyRequest, id string)
 
 	case "DELETE":
 		if err := a.service.DeleteDiaryEntry(id); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+}
+
+// handleMemories routes GET (list) and POST (create) for /v1/memory.
+func (a *Adapter) handleMemories(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		category := req.QueryStringParameters["category"]
+		memories, err := a.memService.GetMemories(category)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		body, err := json.Marshal(memories)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "POST":
+		var memory domain.Memory
+		if err := json.Unmarshal([]byte(req.Body), &memory); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.memService.CreateMemory(memory); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(201, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+}
+
+// handleMemory routes GET, PUT, DELETE for /v1/memory/{id}.
+func (a *Adapter) handleMemory(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		memory, err := a.memService.GetMemory(id)
+		if err != nil {
+			return jsonResponse(404, `{"error":"memory not found"}`), nil
+		}
+		body, err := json.Marshal(memory)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "PUT":
+		var fields map[string]any
+		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.memService.UpdateMemory(id, fields); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	case "DELETE":
+		if err := a.memService.DeleteMemory(id); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil

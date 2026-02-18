@@ -1,6 +1,11 @@
 // ABOUTME: This file defines domain types and service interface for claude-mem data.
-// ABOUTME: It models observations, summaries, and prompts synced from the claude-mem SQLite database.
+// ABOUTME: It models observations, summaries, prompts, and memories stored in the josh-bot-mem table.
 package domain
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+)
 
 // MemObservation represents a single development observation from claude-mem.
 type MemObservation struct {
@@ -59,7 +64,27 @@ type MemStats struct {
 	ByProject         map[string]int `json:"by_project"`
 }
 
-// MemService provides read-only access to claude-mem data stored in DynamoDB.
+// Memory represents a k8-one memory entry stored in the josh-bot-mem table.
+type Memory struct {
+	ID             string   `json:"id" dynamodbav:"id"`
+	Type           string   `json:"type" dynamodbav:"type"`
+	Content        string   `json:"content" dynamodbav:"content"`
+	Category       string   `json:"category" dynamodbav:"category"`
+	Tags           []string `json:"tags" dynamodbav:"tags"`
+	Source         string   `json:"source" dynamodbav:"source"`
+	CreatedAt      string   `json:"created_at" dynamodbav:"created_at"`
+	CreatedAtEpoch int64    `json:"created_at_epoch" dynamodbav:"created_at_epoch"`
+	UpdatedAt      string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
+}
+
+// MemoryID generates a random ID with a "mem#" prefix.
+func MemoryID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return "mem#" + hex.EncodeToString(b)
+}
+
+// MemService provides access to claude-mem data and memories stored in DynamoDB.
 type MemService interface {
 	GetObservations(obsType, project string) ([]MemObservation, error)
 	GetObservation(id string) (MemObservation, error)
@@ -68,4 +93,9 @@ type MemService interface {
 	GetPrompts() ([]MemPrompt, error)
 	GetPrompt(id string) (MemPrompt, error)
 	GetStats() (MemStats, error)
+	GetMemories(category string) ([]Memory, error)
+	GetMemory(id string) (Memory, error)
+	CreateMemory(memory Memory) error
+	UpdateMemory(id string, fields map[string]any) error
+	DeleteMemory(id string) error
 }

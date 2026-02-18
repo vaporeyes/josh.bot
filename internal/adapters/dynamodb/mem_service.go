@@ -1,4 +1,4 @@
-// ABOUTME: This file implements MemService using DynamoDB for reading claude-mem data.
+// ABOUTME: This file implements MemService using DynamoDB for reading claude-mem data and memory CRUD.
 // ABOUTME: It queries the josh-bot-mem table using the type-index GSI and prefix-based scans.
 package dynamodb
 
@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -293,6 +294,162 @@ func (s *MemService) scanByPrefix(prefix, project string) ([]map[string]types.At
 	}
 
 	return output.Items, nil
+}
+
+// allowedMemoryFields defines which memory fields can be updated via PUT.
+var allowedMemoryFields = map[string]bool{
+	"content": true, "category": true, "tags": true, "source": true,
+}
+
+// GetMemories returns memories, optionally filtered by category.
+func (s *MemService) GetMemories(category string) ([]domain.Memory, error) {
+	items, err := s.queryByType("memory", "")
+	if err != nil {
+		return nil, fmt.Errorf("query memories: %w", err)
+	}
+
+	memories := make([]domain.Memory, 0, len(items))
+	for _, item := range items {
+		var mem domain.Memory
+		if err := attributevalue.UnmarshalMap(item, &mem); err != nil {
+			return nil, fmt.Errorf("unmarshal memory: %w", err)
+		}
+		if category != "" && mem.Category != category {
+			continue
+		}
+		memories = append(memories, mem)
+	}
+
+	return memories, nil
+}
+
+// GetMemory returns a single memory by ID.
+func (s *MemService) GetMemory(id string) (domain.Memory, error) {
+	key := id
+	if !strings.HasPrefix(id, "mem#") {
+		key = "mem#" + id
+	}
+
+	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: key},
+		},
+	})
+	if err != nil {
+		return domain.Memory{}, fmt.Errorf("dynamodb GetItem: %w", err)
+	}
+	if output.Item == nil {
+		return domain.Memory{}, fmt.Errorf("memory %q not found", id)
+	}
+
+	var mem domain.Memory
+	if err := attributevalue.UnmarshalMap(output.Item, &mem); err != nil {
+		return domain.Memory{}, fmt.Errorf("unmarshal memory: %w", err)
+	}
+
+	return mem, nil
+}
+
+// CreateMemory adds a new memory to DynamoDB with a generated random ID.
+func (s *MemService) CreateMemory(memory domain.Memory) error {
+	now := time.Now().UTC()
+	memory.ID = domain.MemoryID()
+	memory.Type = "memory"
+	memory.CreatedAt = now.Format(time.RFC3339)
+	memory.CreatedAtEpoch = now.Unix()
+
+	item, err := attributevalue.MarshalMap(memory)
+	if err != nil {
+		return fmt.Errorf("marshal memory: %w", err)
+	}
+
+	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+		TableName: &s.tableName,
+		Item:      item,
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb PutItem: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateMemory updates specific fields on a memory in DynamoDB.
+func (s *MemService) UpdateMemory(id string, fields map[string]any) error {
+	if len(fields) == 0 {
+		return fmt.Errorf("no fields provided for update")
+	}
+
+	for key := range fields {
+		if !allowedMemoryFields[key] {
+			return fmt.Errorf("field %q is not an updatable memory field", key)
+		}
+	}
+
+	key := id
+	if !strings.HasPrefix(id, "mem#") {
+		key = "mem#" + id
+	}
+
+	// Add updated_at timestamp
+	fields["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	updateExpr := "SET "
+	exprNames := map[string]string{}
+	exprValues := map[string]types.AttributeValue{}
+
+	i := 0
+	for k, v := range fields {
+		if i > 0 {
+			updateExpr += ", "
+		}
+		placeholder := fmt.Sprintf("#f%d", i)
+		valuePlaceholder := fmt.Sprintf(":v%d", i)
+		updateExpr += placeholder + " = " + valuePlaceholder
+		exprNames[placeholder] = k
+
+		av, err := attributevalue.Marshal(v)
+		if err != nil {
+			return fmt.Errorf("marshal field %q: %w", k, err)
+		}
+		exprValues[valuePlaceholder] = av
+		i++
+	}
+
+	_, err := s.client.UpdateItem(context.Background(), &dynamodb.UpdateItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: key},
+		},
+		UpdateExpression:          &updateExpr,
+		ExpressionAttributeNames:  exprNames,
+		ExpressionAttributeValues: exprValues,
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb UpdateItem: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteMemory removes a memory from DynamoDB.
+func (s *MemService) DeleteMemory(id string) error {
+	key := id
+	if !strings.HasPrefix(id, "mem#") {
+		key = "mem#" + id
+	}
+
+	_, err := s.client.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: key},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb DeleteItem: %w", err)
+	}
+	return nil
 }
 
 func boolPtr(b bool) *bool {

@@ -654,6 +654,88 @@ func (a *Adapter) MemStatsHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, stats)
 }
 
+// MemoriesHandler handles GET /v1/memory (list memories).
+func (a *Adapter) MemoriesHandler(w http.ResponseWriter, r *http.Request) {
+	category := r.URL.Query().Get("category")
+	memories, err := a.memService.GetMemories(category)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, memories)
+}
+
+// CreateMemoryHandler handles POST /v1/memory (create memory).
+func (a *Adapter) CreateMemoryHandler(w http.ResponseWriter, r *http.Request) {
+	var memory domain.Memory
+	if err := json.NewDecoder(r.Body).Decode(&memory); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.memService.CreateMemory(memory); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusCreated)
+}
+
+// MemoryHandler handles GET /v1/memory/{id}.
+func (a *Adapter) MemoryHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/memory/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	memory, err := a.memService.GetMemory(id)
+	if err != nil {
+		http.Error(w, `{"error":"memory not found"}`, http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, memory)
+}
+
+// UpdateMemoryHandler handles PUT /v1/memory/{id}.
+func (a *Adapter) UpdateMemoryHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/memory/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var fields map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.memService.UpdateMemory(id, fields); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
+// DeleteMemoryHandler handles DELETE /v1/memory/{id}.
+func (a *Adapter) DeleteMemoryHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/memory/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.memService.DeleteMemory(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
 // writeJSON encodes val as JSON and writes it to the response.
 func writeJSON(w http.ResponseWriter, statusCode int, val any) {
 	w.Header().Set("Content-Type", "application/json")

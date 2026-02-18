@@ -36,6 +36,8 @@ func main() {
 	mux.HandleFunc("/v1/mem/prompts", adapter.MemPromptsHandler)
 	mux.HandleFunc("/v1/mem/prompts/", adapter.MemPromptHandler)
 	mux.HandleFunc("/v1/mem/stats", adapter.MemStatsHandler)
+	mux.HandleFunc("/v1/memory", adapter.MemoriesHandler)
+	mux.HandleFunc("/v1/memory/", adapter.MemoryHandler)
 
 	// Start the server
 	log.Println("Starting server on :8080")
