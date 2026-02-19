@@ -626,6 +626,280 @@ func TestRouter_DeleteDiaryEntry_Success(t *testing.T) {
 	}
 }
 
+// --- Webhook Tests ---
+
+// newWebhookAdapter creates an adapter with webhook service wired up.
+func newWebhookAdapter(t *testing.T) *Adapter {
+	t.Helper()
+	t.Setenv("API_KEY", "key")
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService(), mock.NewMemService())
+	adapter.SetWebhookService(mock.NewWebhookService(), "test-webhook-secret")
+	return adapter
+}
+
+func TestRouter_PostWebhook_ValidSignature(t *testing.T) {
+	adapter := newWebhookAdapter(t)
+	body := `{"type":"message","source":"k8-one","payload":{"text":"hello"}}`
+	sig := "sha256=" + domain.ComputeWebhookSignature(body, "test-webhook-secret")
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/webhooks",
+		Headers:    map[string]string{"x-webhook-signature": sig},
+		Body:       body,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 201 {
+		t.Errorf("expected 201, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestRouter_PostWebhook_InvalidSignature(t *testing.T) {
+	adapter := newWebhookAdapter(t)
+	body := `{"type":"message","source":"k8-one","payload":{"text":"hello"}}`
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/webhooks",
+		Headers:    map[string]string{"x-webhook-signature": "sha256=deadbeef"},
+		Body:       body,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 401 {
+		t.Errorf("expected 401, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestRouter_PostWebhook_MissingSignature(t *testing.T) {
+	adapter := newWebhookAdapter(t)
+	body := `{"type":"message","source":"k8-one","payload":{"text":"hello"}}`
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/webhooks",
+		Headers:    map[string]string{},
+		Body:       body,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 401 {
+		t.Errorf("expected 401, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestRouter_PostWebhook_NoSecretConfigured(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService(), mock.NewMemService())
+	// Webhook service set with empty secret
+	adapter.SetWebhookService(mock.NewWebhookService(), "")
+	body := `{"type":"message","source":"k8-one","payload":{"text":"hello"}}`
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/webhooks",
+		Headers:    map[string]string{"x-webhook-signature": "sha256=anything"},
+		Body:       body,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 500 {
+		t.Errorf("expected 500 when no secret configured, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestRouter_PostWebhook_InvalidJSON(t *testing.T) {
+	adapter := newWebhookAdapter(t)
+	body := `{bad json`
+	sig := "sha256=" + domain.ComputeWebhookSignature(body, "test-webhook-secret")
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/webhooks",
+		Headers:    map[string]string{"x-webhook-signature": sig},
+		Body:       body,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 400 {
+		t.Errorf("expected 400, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestRouter_GetWebhooks_Success(t *testing.T) {
+	adapter := newWebhookAdapter(t)
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "GET",
+		Path:       "/v1/webhooks",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Body, "k8-one") {
+		t.Errorf("expected k8-one in response: %v", resp.Body)
+	}
+	if !strings.Contains(resp.Body, "cookbot") {
+		t.Errorf("expected cookbot in response: %v", resp.Body)
+	}
+}
+
+func TestRouter_GetWebhooks_FilterByType(t *testing.T) {
+	adapter := newWebhookAdapter(t)
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod:            "GET",
+		Path:                  "/v1/webhooks",
+		Headers:               map[string]string{"x-api-key": "key"},
+		QueryStringParameters: map[string]string{"type": "alert"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Body, "cookbot") {
+		t.Errorf("expected cookbot alert in filtered results: %v", resp.Body)
+	}
+	if strings.Contains(resp.Body, "k8-one") {
+		t.Errorf("expected k8-one to be filtered out: %v", resp.Body)
+	}
+}
+
+func TestRouter_GetWebhooks_FilterBySource(t *testing.T) {
+	adapter := newWebhookAdapter(t)
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod:            "GET",
+		Path:                  "/v1/webhooks",
+		Headers:               map[string]string{"x-api-key": "key"},
+		QueryStringParameters: map[string]string{"source": "k8-one"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Body, "k8-one") {
+		t.Errorf("expected k8-one in filtered results: %v", resp.Body)
+	}
+	if strings.Contains(resp.Body, "cookbot") {
+		t.Errorf("expected cookbot to be filtered out: %v", resp.Body)
+	}
+}
+
+func TestRouter_GetWebhookEvent_Success(t *testing.T) {
+	adapter := newWebhookAdapter(t)
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "GET",
+		Path:       "/v1/webhooks/abc123def456",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("expected 200, got %d: %s", resp.StatusCode, resp.Body)
+	}
+
+	var event domain.WebhookEvent
+	if err := json.Unmarshal([]byte(resp.Body), &event); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if event.Source != "k8-one" {
+		t.Errorf("expected source 'k8-one', got '%s'", event.Source)
+	}
+}
+
+func TestRouter_GetWebhookEvent_NotFound(t *testing.T) {
+	adapter := newWebhookAdapter(t)
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "GET",
+		Path:       "/v1/webhooks/nonexistent",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 404 {
+		t.Errorf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestRouter_DeleteWebhook_MethodNotAllowed(t *testing.T) {
+	adapter := newWebhookAdapter(t)
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "DELETE",
+		Path:       "/v1/webhooks",
+		Headers:    map[string]string{"x-api-key": "key"},
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 405 {
+		t.Errorf("expected 405, got %d", resp.StatusCode)
+	}
+}
+
+func TestRouter_PostWebhook_CORSHeaders(t *testing.T) {
+	adapter := newWebhookAdapter(t)
+	body := `{"type":"message","source":"k8-one","payload":{"text":"hello"}}`
+	sig := "sha256=" + domain.ComputeWebhookSignature(body, "test-webhook-secret")
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/webhooks",
+		Headers:    map[string]string{"x-webhook-signature": sig},
+		Body:       body,
+	}
+
+	resp, err := adapter.Router(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	allowHeaders := resp.Headers["Access-Control-Allow-Headers"]
+	if !strings.Contains(allowHeaders, "x-webhook-signature") {
+		t.Errorf("expected x-webhook-signature in CORS allow headers, got: %s", allowHeaders)
+	}
+}
+
 func TestRouter_NotFound(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 

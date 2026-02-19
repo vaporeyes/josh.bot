@@ -37,6 +37,7 @@ Uses DynamoDB **single-table design** with the `id` partition key and prefixed k
 | `til#` | `til#a1b2c3d4e5f6a1b2` | TIL entries (random ID) |
 | `log#` | `log#a1b2c3d4e5f6a1b2` | Activity log entries (random ID) |
 | `diary#` | `diary#a1b2c3d4e5f6a1b2` | Diary/journal entries (random ID) |
+| `webhook#` | `webhook#a1b2c3d4e5f6a1b2` | Inbound webhook events (random ID, immutable) |
 
 Link IDs are derived from the URL via SHA256, giving automatic deduplication -- saving the same URL twice updates the existing entry. Notes, TILs, log entries, and diary entries use random 8-byte hex IDs.
 
@@ -373,6 +374,52 @@ curl -X DELETE https://api.josh.bot/v1/diary/a1b2c3d4e5f6a1b2 \
 ```
 
 **Obsidian publishing:** When `GITHUB_TOKEN`, `DIARY_REPO_OWNER`, and `DIARY_REPO_NAME` env vars are set, POST creates a markdown file in the target repo at `diary/YYYY-MM-DD-HHMMSS.md` with YAML frontmatter and structured sections. GitHub publish is best-effort -- if it fails, the DynamoDB entry is still returned.
+
+### Webhooks (Bot-to-Bot Communication)
+
+Inbound webhook events from other bots. Events are immutable once received (append-only log). POST uses HMAC-SHA256 signature authentication; GET uses normal API key auth.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/v1/webhooks` | HMAC signature | Receive an inbound webhook event |
+| GET | `/v1/webhooks` | API key | List events (optional `?type=` and `?source=` filters) |
+| GET | `/v1/webhooks/{id}` | API key | Get a single event |
+
+```bash
+# Send a webhook event (HMAC-signed)
+BODY='{"type":"message","source":"k8-one","payload":{"text":"hello"}}'
+SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" -hex | awk '{print $NF}')
+curl -X POST https://api.josh.bot/v1/webhooks \
+  -H "Content-Type: application/json" \
+  -H "X-Webhook-Signature: sha256=$SIG" \
+  -d "$BODY"
+
+# List all webhook events
+curl -H "x-api-key: <key>" https://api.josh.bot/v1/webhooks
+
+# Filter by type
+curl -H "x-api-key: <key>" "https://api.josh.bot/v1/webhooks?type=alert"
+
+# Filter by source
+curl -H "x-api-key: <key>" "https://api.josh.bot/v1/webhooks?source=k8-one"
+
+# Get a specific event
+curl -H "x-api-key: <key>" https://api.josh.bot/v1/webhooks/a1b2c3d4e5f6a1b2
+```
+
+**Event shape:**
+
+```json
+{
+  "id": "webhook#a1b2c3d4e5f6a1b2",
+  "type": "message",
+  "source": "k8-one",
+  "payload": { "text": "hello from k8-one" },
+  "created_at": "2026-02-19T10:00:00Z"
+}
+```
+
+**Environment variables:** `WEBHOOK_SECRET` must be set for POST to work. If unset, all webhook POST requests are rejected (fail-closed).
 
 ### Development Memory (claude-mem)
 

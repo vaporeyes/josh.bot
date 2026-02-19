@@ -18,6 +18,8 @@ type Adapter struct {
 	metricsService domain.MetricsService
 	memService     domain.MemService
 	diaryService   domain.DiaryService
+	webhookService domain.WebhookService
+	webhookSecret  string
 }
 
 // NewAdapter creates a new Lambda adapter for the given services.
@@ -31,12 +33,24 @@ func (a *Adapter) SetDiaryService(ds domain.DiaryService) {
 	a.diaryService = ds
 }
 
+// SetWebhookService sets the webhook service and shared secret for the adapter.
+// AIDEV-NOTE: Separate setter avoids changing NewAdapter signature for all callers.
+func (a *Adapter) SetWebhookService(ws domain.WebhookService, secret string) {
+	a.webhookService = ws
+	a.webhookSecret = secret
+}
+
 // isPublicRoute returns true for routes that don't require API key auth.
 func isPublicRoute(method, path string) bool {
 	if method != "GET" {
 		return false
 	}
 	return path == "/v1/status" || path == "/v1/metrics"
+}
+
+// isWebhookPost returns true for POST /v1/webhooks which uses HMAC auth instead of API key.
+func isWebhookPost(method, path string) bool {
+	return method == "POST" && path == "/v1/webhooks"
 }
 
 // Router handles API Gateway proxy requests with API key validation.
@@ -46,8 +60,8 @@ func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayPr
 		return jsonResponse(204, ""), nil
 	}
 
-	// Validate API key from x-api-key header (skip for public routes)
-	if !isPublicRoute(req.HTTPMethod, req.Path) {
+	// Validate API key from x-api-key header (skip for public routes and webhook POST)
+	if !isPublicRoute(req.HTTPMethod, req.Path) && !isWebhookPost(req.HTTPMethod, req.Path) {
 		expectedKey := os.Getenv("API_KEY")
 		if expectedKey != "" && req.Headers["x-api-key"] != expectedKey {
 			return jsonResponse(401, `{"error":"unauthorized"}`), nil
@@ -111,6 +125,11 @@ func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayPr
 	case strings.HasPrefix(req.Path, "/v1/memory/"):
 		id := strings.TrimPrefix(req.Path, "/v1/memory/")
 		return a.handleMemory(req, id)
+	case req.Path == "/v1/webhooks":
+		return a.handleWebhooks(req)
+	case strings.HasPrefix(req.Path, "/v1/webhooks/"):
+		id := strings.TrimPrefix(req.Path, "/v1/webhooks/")
+		return a.handleWebhookEvent(req, id)
 	default:
 		return jsonResponse(404, `{"error":"not found"}`), nil
 	}
@@ -742,6 +761,65 @@ func (a *Adapter) handleMemory(req events.APIGatewayProxyRequest, id string) (ev
 	}
 }
 
+// handleWebhooks routes GET (list) and POST (create) for /v1/webhooks.
+// AIDEV-NOTE: POST uses HMAC auth (not API key). GET uses normal API key auth.
+func (a *Adapter) handleWebhooks(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		eventType := req.QueryStringParameters["type"]
+		source := req.QueryStringParameters["source"]
+		events, err := a.webhookService.GetWebhookEvents(eventType, source)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		body, err := json.Marshal(events)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "POST":
+		// Reject if webhook secret is not configured
+		if a.webhookSecret == "" {
+			return jsonResponse(500, `{"error":"webhook secret not configured"}`), nil
+		}
+
+		// Validate HMAC signature
+		signature := req.Headers["x-webhook-signature"]
+		if !domain.ValidateWebhookSignature(req.Body, signature, a.webhookSecret) {
+			return jsonResponse(401, `{"error":"invalid webhook signature"}`), nil
+		}
+
+		var event domain.WebhookEvent
+		if err := json.Unmarshal([]byte(req.Body), &event); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.webhookService.CreateWebhookEvent(event); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(201, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+}
+
+// handleWebhookEvent handles GET /v1/webhooks/{id}.
+func (a *Adapter) handleWebhookEvent(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+	if req.HTTPMethod != "GET" {
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+	event, err := a.webhookService.GetWebhookEvent(id)
+	if err != nil {
+		return jsonResponse(404, `{"error":"webhook event not found"}`), nil
+	}
+	body, err := json.Marshal(event)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	return jsonResponse(200, string(body)), nil
+}
+
 func jsonResponse(statusCode int, body string) events.APIGatewayProxyResponse {
 	return events.APIGatewayProxyResponse{
 		StatusCode: statusCode,
@@ -749,7 +827,7 @@ func jsonResponse(statusCode int, body string) events.APIGatewayProxyResponse {
 		Headers: map[string]string{
 			"Content-Type":                 "application/json",
 			"Access-Control-Allow-Origin":  "*",
-			"Access-Control-Allow-Headers": "Content-Type, x-api-key",
+			"Access-Control-Allow-Headers": "Content-Type, x-api-key, x-webhook-signature",
 			"Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, OPTIONS",
 		},
 	}

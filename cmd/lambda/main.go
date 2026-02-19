@@ -43,6 +43,11 @@ func main() {
 	metricsService := dynamodbadapter.NewMetricsService(client, liftsTableName, tableName, memService)
 	adapter := lambdaadapter.NewAdapter(service, metricsService, memService)
 
+	// Wire up webhook service if secret is configured
+	webhookSecret := os.Getenv("WEBHOOK_SECRET")
+	webhookService := dynamodbadapter.NewWebhookService(client, tableName)
+	adapter.SetWebhookService(webhookService, webhookSecret)
+
 	// Wire up diary service with GitHub publishing if configured
 	ghToken := os.Getenv("GITHUB_TOKEN")
 	ghOwner := os.Getenv("DIARY_REPO_OWNER")
