@@ -3,7 +3,7 @@
 package mock
 
 import (
-	"fmt"
+	"context"
 
 	"github.com/jduncan/josh-bot/internal/domain"
 )
@@ -17,7 +17,7 @@ func NewMemService() *MemService {
 }
 
 // GetObservations returns hardcoded observations, optionally filtered by type and project.
-func (s *MemService) GetObservations(obsType, project string) ([]domain.MemObservation, error) {
+func (s *MemService) GetObservations(_ context.Context, obsType, project string) ([]domain.MemObservation, error) {
 	observations := []domain.MemObservation{
 		{
 			ID:             "obs#42",
@@ -56,18 +56,18 @@ func (s *MemService) GetObservations(obsType, project string) ([]domain.MemObser
 }
 
 // GetObservation returns a hardcoded observation by ID.
-func (s *MemService) GetObservation(id string) (domain.MemObservation, error) {
-	obs, _ := s.GetObservations("", "")
+func (s *MemService) GetObservation(ctx context.Context, id string) (domain.MemObservation, error) {
+	obs, _ := s.GetObservations(ctx, "", "")
 	for _, o := range obs {
 		if o.ID == id || o.ID == "obs#"+id {
 			return o, nil
 		}
 	}
-	return domain.MemObservation{}, fmt.Errorf("observation %q not found", id)
+	return domain.MemObservation{}, &domain.NotFoundError{Resource: "observation", ID: id}
 }
 
 // GetSummaries returns hardcoded summaries, optionally filtered by project.
-func (s *MemService) GetSummaries(project string) ([]domain.MemSummary, error) {
+func (s *MemService) GetSummaries(_ context.Context, project string) ([]domain.MemSummary, error) {
 	summaries := []domain.MemSummary{
 		{
 			ID:             "summary#10",
@@ -95,18 +95,18 @@ func (s *MemService) GetSummaries(project string) ([]domain.MemSummary, error) {
 }
 
 // GetSummary returns a hardcoded summary by ID.
-func (s *MemService) GetSummary(id string) (domain.MemSummary, error) {
-	summaries, _ := s.GetSummaries("")
+func (s *MemService) GetSummary(ctx context.Context, id string) (domain.MemSummary, error) {
+	summaries, _ := s.GetSummaries(ctx, "")
 	for _, sm := range summaries {
 		if sm.ID == id || sm.ID == "summary#"+id {
 			return sm, nil
 		}
 	}
-	return domain.MemSummary{}, fmt.Errorf("summary %q not found", id)
+	return domain.MemSummary{}, &domain.NotFoundError{Resource: "summary", ID: id}
 }
 
 // GetPrompts returns hardcoded prompts.
-func (s *MemService) GetPrompts() ([]domain.MemPrompt, error) {
+func (s *MemService) GetPrompts(_ context.Context) ([]domain.MemPrompt, error) {
 	return []domain.MemPrompt{
 		{
 			ID:             "prompt#5",
@@ -122,18 +122,18 @@ func (s *MemService) GetPrompts() ([]domain.MemPrompt, error) {
 }
 
 // GetPrompt returns a hardcoded prompt by ID.
-func (s *MemService) GetPrompt(id string) (domain.MemPrompt, error) {
-	prompts, _ := s.GetPrompts()
+func (s *MemService) GetPrompt(ctx context.Context, id string) (domain.MemPrompt, error) {
+	prompts, _ := s.GetPrompts(ctx)
 	for _, p := range prompts {
 		if p.ID == id || p.ID == "prompt#"+id {
 			return p, nil
 		}
 	}
-	return domain.MemPrompt{}, fmt.Errorf("prompt %q not found", id)
+	return domain.MemPrompt{}, &domain.NotFoundError{Resource: "prompt", ID: id}
 }
 
 // GetMemories returns hardcoded memories, optionally filtered by category.
-func (s *MemService) GetMemories(category string) ([]domain.Memory, error) {
+func (s *MemService) GetMemories(_ context.Context, category string) ([]domain.Memory, error) {
 	memories := []domain.Memory{
 		{
 			ID:             "mem#abc12345",
@@ -160,33 +160,33 @@ func (s *MemService) GetMemories(category string) ([]domain.Memory, error) {
 }
 
 // GetMemory returns a hardcoded memory by ID.
-func (s *MemService) GetMemory(id string) (domain.Memory, error) {
-	memories, _ := s.GetMemories("")
+func (s *MemService) GetMemory(ctx context.Context, id string) (domain.Memory, error) {
+	memories, _ := s.GetMemories(ctx, "")
 	for _, m := range memories {
 		if m.ID == id || m.ID == "mem#"+id {
 			return m, nil
 		}
 	}
-	return domain.Memory{}, fmt.Errorf("memory %q not found", id)
+	return domain.Memory{}, &domain.NotFoundError{Resource: "memory", ID: id}
 }
 
 // CreateMemory is a no-op mock for creating memories.
-func (s *MemService) CreateMemory(memory domain.Memory) error {
+func (s *MemService) CreateMemory(_ context.Context, memory domain.Memory) error {
 	return nil
 }
 
 // UpdateMemory is a no-op mock for updating memories.
-func (s *MemService) UpdateMemory(id string, fields map[string]any) error {
+func (s *MemService) UpdateMemory(_ context.Context, id string, fields map[string]any) error {
 	return nil
 }
 
 // DeleteMemory is a no-op mock for deleting memories.
-func (s *MemService) DeleteMemory(id string) error {
+func (s *MemService) DeleteMemory(_ context.Context, id string) error {
 	return nil
 }
 
 // GetStats returns hardcoded aggregate stats.
-func (s *MemService) GetStats() (domain.MemStats, error) {
+func (s *MemService) GetStats(_ context.Context) (domain.MemStats, error) {
 	return domain.MemStats{
 		TotalObservations: 150,
 		TotalSummaries:    30,

@@ -3,6 +3,7 @@
 package domain
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -167,38 +168,97 @@ func DiaryEntryID() string {
 	return "diary#" + hex.EncodeToString(b)
 }
 
+// --- Validation ---
+
+// Validate checks required fields on a Project.
+func (p Project) Validate() error {
+	if p.Slug == "" {
+		return &ValidationError{Field: "slug", Message: "cannot be empty"}
+	}
+	if p.Name == "" {
+		return &ValidationError{Field: "name", Message: "cannot be empty"}
+	}
+	return nil
+}
+
+// Validate checks required fields on a Link.
+func (l Link) Validate() error {
+	if l.URL == "" {
+		return &ValidationError{Field: "url", Message: "cannot be empty"}
+	}
+	return nil
+}
+
+// Validate checks required fields on a Note.
+func (n Note) Validate() error {
+	if n.Title == "" {
+		return &ValidationError{Field: "title", Message: "cannot be empty"}
+	}
+	if n.Body == "" {
+		return &ValidationError{Field: "body", Message: "cannot be empty"}
+	}
+	return nil
+}
+
+// Validate checks required fields on a TIL.
+func (t TIL) Validate() error {
+	if t.Title == "" {
+		return &ValidationError{Field: "title", Message: "cannot be empty"}
+	}
+	if t.Body == "" {
+		return &ValidationError{Field: "body", Message: "cannot be empty"}
+	}
+	return nil
+}
+
+// Validate checks required fields on a LogEntry.
+func (le LogEntry) Validate() error {
+	if le.Message == "" {
+		return &ValidationError{Field: "message", Message: "cannot be empty"}
+	}
+	return nil
+}
+
+// Validate checks required fields on a DiaryEntry.
+func (de DiaryEntry) Validate() error {
+	if de.Body == "" {
+		return &ValidationError{Field: "body", Message: "cannot be empty"}
+	}
+	return nil
+}
+
 // BotService is the interface that defines the operations for the bot.
 type BotService interface {
-	GetStatus() (Status, error)
-	GetProjects() ([]Project, error)
-	GetProject(slug string) (Project, error)
-	CreateProject(project Project) error
-	UpdateProject(slug string, fields map[string]any) error
-	DeleteProject(slug string) error
-	UpdateStatus(fields map[string]any) error
-	GetLinks(tag string) ([]Link, error)
-	GetLink(id string) (Link, error)
-	CreateLink(link Link) error
-	UpdateLink(id string, fields map[string]any) error
-	DeleteLink(id string) error
-	GetNotes(tag string) ([]Note, error)
-	GetNote(id string) (Note, error)
-	CreateNote(note Note) error
-	UpdateNote(id string, fields map[string]any) error
-	DeleteNote(id string) error
-	GetTILs(tag string) ([]TIL, error)
-	GetTIL(id string) (TIL, error)
-	CreateTIL(til TIL) error
-	UpdateTIL(id string, fields map[string]any) error
-	DeleteTIL(id string) error
-	GetLogEntries(tag string) ([]LogEntry, error)
-	GetLogEntry(id string) (LogEntry, error)
-	CreateLogEntry(entry LogEntry) error
-	UpdateLogEntry(id string, fields map[string]any) error
-	DeleteLogEntry(id string) error
-	GetDiaryEntries(tag string) ([]DiaryEntry, error)
-	GetDiaryEntry(id string) (DiaryEntry, error)
-	CreateDiaryEntry(entry DiaryEntry) error
-	UpdateDiaryEntry(id string, fields map[string]any) error
-	DeleteDiaryEntry(id string) error
+	GetStatus(ctx context.Context) (Status, error)
+	GetProjects(ctx context.Context) ([]Project, error)
+	GetProject(ctx context.Context, slug string) (Project, error)
+	CreateProject(ctx context.Context, project Project) error
+	UpdateProject(ctx context.Context, slug string, fields map[string]any) error
+	DeleteProject(ctx context.Context, slug string) error
+	UpdateStatus(ctx context.Context, fields map[string]any) error
+	GetLinks(ctx context.Context, tag string) ([]Link, error)
+	GetLink(ctx context.Context, id string) (Link, error)
+	CreateLink(ctx context.Context, link Link) error
+	UpdateLink(ctx context.Context, id string, fields map[string]any) error
+	DeleteLink(ctx context.Context, id string) error
+	GetNotes(ctx context.Context, tag string) ([]Note, error)
+	GetNote(ctx context.Context, id string) (Note, error)
+	CreateNote(ctx context.Context, note Note) error
+	UpdateNote(ctx context.Context, id string, fields map[string]any) error
+	DeleteNote(ctx context.Context, id string) error
+	GetTILs(ctx context.Context, tag string) ([]TIL, error)
+	GetTIL(ctx context.Context, id string) (TIL, error)
+	CreateTIL(ctx context.Context, til TIL) error
+	UpdateTIL(ctx context.Context, id string, fields map[string]any) error
+	DeleteTIL(ctx context.Context, id string) error
+	GetLogEntries(ctx context.Context, tag string) ([]LogEntry, error)
+	GetLogEntry(ctx context.Context, id string) (LogEntry, error)
+	CreateLogEntry(ctx context.Context, entry LogEntry) error
+	UpdateLogEntry(ctx context.Context, id string, fields map[string]any) error
+	DeleteLogEntry(ctx context.Context, id string) error
+	GetDiaryEntries(ctx context.Context, tag string) ([]DiaryEntry, error)
+	GetDiaryEntry(ctx context.Context, id string) (DiaryEntry, error)
+	CreateDiaryEntry(ctx context.Context, entry DiaryEntry) error
+	UpdateDiaryEntry(ctx context.Context, id string, fields map[string]any) error
+	DeleteDiaryEntry(ctx context.Context, id string) error
 }

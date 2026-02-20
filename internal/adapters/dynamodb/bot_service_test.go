@@ -88,7 +88,7 @@ func TestGetStatus_Success(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	status, err := svc.GetStatus()
+	status, err := svc.GetStatus(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestGetStatus_ItemNotFound(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	_, err := svc.GetStatus()
+	_, err := svc.GetStatus(context.Background())
 	if err == nil {
 		t.Error("expected error for missing item, got nil")
 	}
@@ -126,7 +126,7 @@ func TestGetStatus_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{getErr: context.DeadlineExceeded}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	_, err := svc.GetStatus()
+	_, err := svc.GetStatus(context.Background())
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
@@ -136,7 +136,7 @@ func TestUpdateStatus_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateStatus(map[string]any{
+	err := svc.UpdateStatus(context.Background(), map[string]any{
 		"current_activity": "Deploying josh.bot",
 		"availability":     "Heads down",
 	})
@@ -162,7 +162,7 @@ func TestUpdateStatus_Success(t *testing.T) {
 func TestUpdateStatus_EmptyFields(t *testing.T) {
 	mock := &mockDynamoDBClient{}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateStatus(map[string]any{})
+	err := svc.UpdateStatus(context.Background(), map[string]any{})
 	if err == nil {
 		t.Error("expected error for empty fields, got nil")
 	}
@@ -171,7 +171,7 @@ func TestUpdateStatus_EmptyFields(t *testing.T) {
 func TestUpdateStatus_InvalidField(t *testing.T) {
 	mock := &mockDynamoDBClient{}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateStatus(map[string]any{"hacker_field": "nope"})
+	err := svc.UpdateStatus(context.Background(), map[string]any{"hacker_field": "nope"})
 	if err == nil {
 		t.Error("expected error for invalid field, got nil")
 	}
@@ -180,7 +180,7 @@ func TestUpdateStatus_InvalidField(t *testing.T) {
 func TestUpdateStatus_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{updateErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateStatus(map[string]any{"status": "busy"})
+	err := svc.UpdateStatus(context.Background(), map[string]any{"status": "busy"})
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
@@ -215,7 +215,7 @@ func TestGetProjects_Success(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	projects, err := svc.GetProjects()
+	projects, err := svc.GetProjects(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestGetProjects_Empty(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	projects, err := svc.GetProjects()
+	projects, err := svc.GetProjects(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestGetProject_Success(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	project, err := svc.GetProject("modular-aws-backend")
+	project, err := svc.GetProject(context.Background(), "modular-aws-backend")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestGetProject_NotFound(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	_, err := svc.GetProject("nonexistent")
+	_, err := svc.GetProject(context.Background(), "nonexistent")
 	if err == nil {
 		t.Error("expected error for missing project, got nil")
 	}
@@ -289,7 +289,7 @@ func TestCreateProject_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.CreateProject(domain.Project{
+	err := svc.CreateProject(context.Background(), domain.Project{
 		Slug:        "new-project",
 		Name:        "New Project",
 		Stack:       "Go",
@@ -319,7 +319,7 @@ func TestCreateProject_Success(t *testing.T) {
 func TestCreateProject_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.CreateProject(domain.Project{Slug: "test", Name: "Test"})
+	err := svc.CreateProject(context.Background(), domain.Project{Slug: "test", Name: "Test"})
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
@@ -329,7 +329,7 @@ func TestUpdateProject_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateProject("modular-aws-backend", map[string]any{
+	err := svc.UpdateProject(context.Background(), "modular-aws-backend", map[string]any{
 		"status": "archived",
 	})
 	if err != nil {
@@ -348,7 +348,7 @@ func TestUpdateProject_Success(t *testing.T) {
 func TestUpdateProject_InvalidField(t *testing.T) {
 	mock := &mockDynamoDBClient{}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateProject("test", map[string]any{"hacker": "nope"})
+	err := svc.UpdateProject(context.Background(), "test", map[string]any{"hacker": "nope"})
 	if err == nil {
 		t.Error("expected error for invalid field, got nil")
 	}
@@ -358,7 +358,7 @@ func TestDeleteProject_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.DeleteProject("modular-aws-backend")
+	err := svc.DeleteProject(context.Background(), "modular-aws-backend")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -374,7 +374,7 @@ func TestDeleteProject_Success(t *testing.T) {
 func TestDeleteProject_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.DeleteProject("test")
+	err := svc.DeleteProject(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
@@ -408,7 +408,7 @@ func TestGetLinks_Success(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	links, err := svc.GetLinks("")
+	links, err := svc.GetLinks(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -437,7 +437,7 @@ func TestGetLinks_FilterByTag(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	links, err := svc.GetLinks("aws")
+	links, err := svc.GetLinks(context.Background(), "aws")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -460,7 +460,7 @@ func TestGetLinks_Empty(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	links, err := svc.GetLinks("")
+	links, err := svc.GetLinks(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -484,7 +484,7 @@ func TestGetLink_Success(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	link, err := svc.GetLink("a1b2c3d4e5f6")
+	link, err := svc.GetLink(context.Background(), "a1b2c3d4e5f6")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -502,7 +502,7 @@ func TestGetLink_NotFound(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	_, err := svc.GetLink("nonexistent")
+	_, err := svc.GetLink(context.Background(), "nonexistent")
 	if err == nil {
 		t.Error("expected error for missing link, got nil")
 	}
@@ -512,7 +512,7 @@ func TestCreateLink_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.CreateLink(domain.Link{
+	err := svc.CreateLink(context.Background(), domain.Link{
 		URL:   "https://go.dev/blog/",
 		Title: "The Go Blog",
 		Tags:  []string{"go", "programming"},
@@ -538,7 +538,7 @@ func TestCreateLink_Success(t *testing.T) {
 func TestCreateLink_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.CreateLink(domain.Link{URL: "https://example.com", Title: "Test"})
+	err := svc.CreateLink(context.Background(), domain.Link{URL: "https://example.com", Title: "Test"})
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
@@ -548,7 +548,7 @@ func TestUpdateLink_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateLink("a1b2c3d4e5f6", map[string]any{
+	err := svc.UpdateLink(context.Background(), "a1b2c3d4e5f6", map[string]any{
 		"title": "Updated Title",
 	})
 	if err != nil {
@@ -566,7 +566,7 @@ func TestUpdateLink_Success(t *testing.T) {
 func TestUpdateLink_InvalidField(t *testing.T) {
 	mock := &mockDynamoDBClient{}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateLink("test", map[string]any{"hacker": "nope"})
+	err := svc.UpdateLink(context.Background(), "test", map[string]any{"hacker": "nope"})
 	if err == nil {
 		t.Error("expected error for invalid field, got nil")
 	}
@@ -576,7 +576,7 @@ func TestDeleteLink_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.DeleteLink("a1b2c3d4e5f6")
+	err := svc.DeleteLink(context.Background(), "a1b2c3d4e5f6")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -592,7 +592,7 @@ func TestDeleteLink_Success(t *testing.T) {
 func TestDeleteLink_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.DeleteLink("test")
+	err := svc.DeleteLink(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
@@ -625,7 +625,7 @@ func TestGetNotes_Success(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	notes, err := svc.GetNotes("")
+	notes, err := svc.GetNotes(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -654,7 +654,7 @@ func TestGetNotes_FilterByTag(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	notes, err := svc.GetNotes("work")
+	notes, err := svc.GetNotes(context.Background(), "work")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -685,7 +685,7 @@ func TestGetNote_Success(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	note, err := svc.GetNote("abc123")
+	note, err := svc.GetNote(context.Background(), "abc123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -703,7 +703,7 @@ func TestGetNote_NotFound(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	_, err := svc.GetNote("nonexistent")
+	_, err := svc.GetNote(context.Background(), "nonexistent")
 	if err == nil {
 		t.Error("expected error for missing note, got nil")
 	}
@@ -713,7 +713,7 @@ func TestCreateNote_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.CreateNote(domain.Note{
+	err := svc.CreateNote(context.Background(), domain.Note{
 		Title: "Meeting notes",
 		Body:  "Discussed API design",
 		Tags:  []string{"work"},
@@ -737,7 +737,7 @@ func TestCreateNote_Success(t *testing.T) {
 func TestCreateNote_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.CreateNote(domain.Note{Title: "Test", Body: "body"})
+	err := svc.CreateNote(context.Background(), domain.Note{Title: "Test", Body: "body"})
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
@@ -747,7 +747,7 @@ func TestUpdateNote_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateNote("abc123", map[string]any{
+	err := svc.UpdateNote(context.Background(), "abc123", map[string]any{
 		"title": "Updated Title",
 	})
 	if err != nil {
@@ -765,7 +765,7 @@ func TestUpdateNote_Success(t *testing.T) {
 func TestUpdateNote_InvalidField(t *testing.T) {
 	mock := &mockDynamoDBClient{}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateNote("test", map[string]any{"hacker": "nope"})
+	err := svc.UpdateNote(context.Background(), "test", map[string]any{"hacker": "nope"})
 	if err == nil {
 		t.Error("expected error for invalid field, got nil")
 	}
@@ -775,7 +775,7 @@ func TestDeleteNote_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.DeleteNote("abc123")
+	err := svc.DeleteNote(context.Background(), "abc123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -791,7 +791,7 @@ func TestDeleteNote_Success(t *testing.T) {
 func TestDeleteNote_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.DeleteNote("test")
+	err := svc.DeleteNote(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
@@ -816,7 +816,7 @@ func TestGetTILs_Success(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	tils, err := svc.GetTILs("")
+	tils, err := svc.GetTILs(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -845,7 +845,7 @@ func TestGetTILs_FilterByTag(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	tils, err := svc.GetTILs("go")
+	tils, err := svc.GetTILs(context.Background(), "go")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -873,7 +873,7 @@ func TestGetTIL_Success(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	til, err := svc.GetTIL("abc123")
+	til, err := svc.GetTIL(context.Background(), "abc123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -888,7 +888,7 @@ func TestGetTIL_NotFound(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	_, err := svc.GetTIL("nonexistent")
+	_, err := svc.GetTIL(context.Background(), "nonexistent")
 	if err == nil {
 		t.Error("expected error for missing til, got nil")
 	}
@@ -898,7 +898,7 @@ func TestCreateTIL_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.CreateTIL(domain.TIL{
+	err := svc.CreateTIL(context.Background(), domain.TIL{
 		Title: "Go slices grow by 2x",
 		Body:  "Capacity doubles",
 		Tags:  []string{"go"},
@@ -922,7 +922,7 @@ func TestCreateTIL_Success(t *testing.T) {
 func TestCreateTIL_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.CreateTIL(domain.TIL{Title: "Test", Body: "body"})
+	err := svc.CreateTIL(context.Background(), domain.TIL{Title: "Test", Body: "body"})
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
@@ -932,7 +932,7 @@ func TestUpdateTIL_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateTIL("abc123", map[string]any{
+	err := svc.UpdateTIL(context.Background(), "abc123", map[string]any{
 		"title": "Updated Title",
 	})
 	if err != nil {
@@ -950,7 +950,7 @@ func TestUpdateTIL_Success(t *testing.T) {
 func TestUpdateTIL_InvalidField(t *testing.T) {
 	mock := &mockDynamoDBClient{}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateTIL("test", map[string]any{"hacker": "nope"})
+	err := svc.UpdateTIL(context.Background(), "test", map[string]any{"hacker": "nope"})
 	if err == nil {
 		t.Error("expected error for invalid field, got nil")
 	}
@@ -960,7 +960,7 @@ func TestDeleteTIL_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.DeleteTIL("abc123")
+	err := svc.DeleteTIL(context.Background(), "abc123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -976,7 +976,7 @@ func TestDeleteTIL_Success(t *testing.T) {
 func TestDeleteTIL_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.DeleteTIL("test")
+	err := svc.DeleteTIL(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
@@ -1007,7 +1007,7 @@ func TestGetLogEntries_Success(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	entries, err := svc.GetLogEntries("")
+	entries, err := svc.GetLogEntries(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1035,7 +1035,7 @@ func TestGetLogEntries_FilterByTag(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	entries, err := svc.GetLogEntries("deploy")
+	entries, err := svc.GetLogEntries(context.Background(), "deploy")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1062,7 +1062,7 @@ func TestGetLogEntry_Success(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	entry, err := svc.GetLogEntry("abc123")
+	entry, err := svc.GetLogEntry(context.Background(), "abc123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1077,7 +1077,7 @@ func TestGetLogEntry_NotFound(t *testing.T) {
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	_, err := svc.GetLogEntry("nonexistent")
+	_, err := svc.GetLogEntry(context.Background(), "nonexistent")
 	if err == nil {
 		t.Error("expected error for missing log entry, got nil")
 	}
@@ -1087,7 +1087,7 @@ func TestCreateLogEntry_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.CreateLogEntry(domain.LogEntry{
+	err := svc.CreateLogEntry(context.Background(), domain.LogEntry{
 		Message: "deployed josh-bot v1.2",
 		Tags:    []string{"deploy"},
 	})
@@ -1110,7 +1110,7 @@ func TestCreateLogEntry_Success(t *testing.T) {
 func TestCreateLogEntry_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.CreateLogEntry(domain.LogEntry{Message: "test"})
+	err := svc.CreateLogEntry(context.Background(), domain.LogEntry{Message: "test"})
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
@@ -1120,7 +1120,7 @@ func TestUpdateLogEntry_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateLogEntry("abc123", map[string]any{
+	err := svc.UpdateLogEntry(context.Background(), "abc123", map[string]any{
 		"message": "deployed josh-bot v1.3",
 	})
 	if err != nil {
@@ -1138,7 +1138,7 @@ func TestUpdateLogEntry_Success(t *testing.T) {
 func TestUpdateLogEntry_InvalidField(t *testing.T) {
 	mock := &mockDynamoDBClient{}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.UpdateLogEntry("test", map[string]any{"hacker": "nope"})
+	err := svc.UpdateLogEntry(context.Background(), "test", map[string]any{"hacker": "nope"})
 	if err == nil {
 		t.Error("expected error for invalid field, got nil")
 	}
@@ -1148,7 +1148,7 @@ func TestDeleteLogEntry_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.DeleteLogEntry("abc123")
+	err := svc.DeleteLogEntry(context.Background(), "abc123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1164,7 +1164,7 @@ func TestDeleteLogEntry_Success(t *testing.T) {
 func TestDeleteLogEntry_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.DeleteLogEntry("test")
+	err := svc.DeleteLogEntry(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
@@ -1174,7 +1174,7 @@ func TestCreateDiaryEntry_SetsCreatedAtWhenEmpty(t *testing.T) {
 	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
 	svc := NewBotService(mock, "josh-bot-data")
 
-	err := svc.CreateDiaryEntry(domain.DiaryEntry{Body: "test entry"})
+	err := svc.CreateDiaryEntry(context.Background(), domain.DiaryEntry{Body: "test entry"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1214,7 +1214,7 @@ func TestCreateDiaryEntry_PreservesCallerValues(t *testing.T) {
 	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
 	svc := NewBotService(mock, "josh-bot-data")
 
-	err := svc.CreateDiaryEntry(domain.DiaryEntry{
+	err := svc.CreateDiaryEntry(context.Background(), domain.DiaryEntry{
 		ID:        "diary#caller-set-id",
 		Body:      "test entry",
 		CreatedAt: "2026-01-01T00:00:00Z",
@@ -1238,7 +1238,7 @@ func TestCreateDiaryEntry_PreservesCallerValues(t *testing.T) {
 func TestCreateDiaryEntry_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
-	err := svc.CreateDiaryEntry(domain.DiaryEntry{Body: "test"})
+	err := svc.CreateDiaryEntry(context.Background(), domain.DiaryEntry{Body: "test"})
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}

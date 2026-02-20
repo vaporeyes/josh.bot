@@ -84,3 +84,7 @@ Thumbs.db
 
 # ignore the artifact
 terraform/function.zip
+
+# bins that could be built
+sync-mem
+export-links

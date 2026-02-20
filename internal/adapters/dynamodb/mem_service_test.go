@@ -3,6 +3,7 @@
 package dynamodb
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -30,7 +31,7 @@ func TestGetObservations_WithType(t *testing.T) {
 	}
 
 	svc := NewMemService(mock, "josh-bot-mem")
-	obs, err := svc.GetObservations("decision", "")
+	obs, err := svc.GetObservations(context.Background(), "decision", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -67,7 +68,7 @@ func TestGetObservations_FilterByProject(t *testing.T) {
 	}
 
 	svc := NewMemService(mock, "josh-bot-mem")
-	obs, err := svc.GetObservations("decision", "josh.bot")
+	obs, err := svc.GetObservations(context.Background(), "decision", "josh.bot")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -98,7 +99,7 @@ func TestGetObservations_NoTypeFilter(t *testing.T) {
 	}
 
 	svc := NewMemService(mock, "josh-bot-mem")
-	obs, err := svc.GetObservations("", "")
+	obs, err := svc.GetObservations(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -128,7 +129,7 @@ func TestGetObservation_Success(t *testing.T) {
 	}
 
 	svc := NewMemService(mock, "josh-bot-mem")
-	obs, err := svc.GetObservation("42")
+	obs, err := svc.GetObservation(context.Background(), "42")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -146,7 +147,7 @@ func TestGetObservation_NotFound(t *testing.T) {
 	}
 
 	svc := NewMemService(mock, "josh-bot-mem")
-	_, err := svc.GetObservation("999")
+	_, err := svc.GetObservation(context.Background(), "999")
 	if err == nil {
 		t.Error("expected error for missing observation, got nil")
 	}
@@ -173,7 +174,7 @@ func TestGetSummaries_Success(t *testing.T) {
 	}
 
 	svc := NewMemService(mock, "josh-bot-mem")
-	summaries, err := svc.GetSummaries("")
+	summaries, err := svc.GetSummaries(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -203,7 +204,7 @@ func TestGetSummaries_FilterByProject(t *testing.T) {
 	}
 
 	svc := NewMemService(mock, "josh-bot-mem")
-	summaries, err := svc.GetSummaries("josh.bot")
+	summaries, err := svc.GetSummaries(context.Background(), "josh.bot")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -235,7 +236,7 @@ func TestGetSummary_Success(t *testing.T) {
 	}
 
 	svc := NewMemService(mock, "josh-bot-mem")
-	summary, err := svc.GetSummary("10")
+	summary, err := svc.GetSummary(context.Background(), "10")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -250,7 +251,7 @@ func TestGetSummary_NotFound(t *testing.T) {
 	}
 
 	svc := NewMemService(mock, "josh-bot-mem")
-	_, err := svc.GetSummary("999")
+	_, err := svc.GetSummary(context.Background(), "999")
 	if err == nil {
 		t.Error("expected error for missing summary, got nil")
 	}
@@ -277,7 +278,7 @@ func TestGetPrompts_Success(t *testing.T) {
 	}
 
 	svc := NewMemService(mock, "josh-bot-mem")
-	prompts, err := svc.GetPrompts()
+	prompts, err := svc.GetPrompts(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -306,7 +307,7 @@ func TestGetPrompt_Success(t *testing.T) {
 	}
 
 	svc := NewMemService(mock, "josh-bot-mem")
-	prompt, err := svc.GetPrompt("5")
+	prompt, err := svc.GetPrompt(context.Background(), "5")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -321,7 +322,7 @@ func TestGetPrompt_NotFound(t *testing.T) {
 	}
 
 	svc := NewMemService(mock, "josh-bot-mem")
-	_, err := svc.GetPrompt("999")
+	_, err := svc.GetPrompt(context.Background(), "999")
 	if err == nil {
 		t.Error("expected error for missing prompt, got nil")
 	}
@@ -343,7 +344,7 @@ func TestGetStats_Success(t *testing.T) {
 	}
 
 	svc := NewMemService(mock, "josh-bot-mem")
-	stats, err := svc.GetStats()
+	stats, err := svc.GetStats(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

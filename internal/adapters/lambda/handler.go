@@ -5,12 +5,29 @@ package lambda
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/jduncan/josh-bot/internal/domain"
 )
+
+// errorResponse maps domain errors to the appropriate HTTP status code and body.
+func errorResponse(err error) (events.APIGatewayProxyResponse, error) {
+	var notFound *domain.NotFoundError
+	if errors.As(err, &notFound) {
+		body := `{"error":"` + notFound.Resource + ` not found"}`
+		return jsonResponse(404, body), nil
+	}
+	var validationErr *domain.ValidationError
+	if errors.As(err, &validationErr) {
+		body := `{"error":"` + validationErr.Error() + `"}`
+		return jsonResponse(400, body), nil
+	}
+	return jsonResponse(500, `{"error":"internal server error"}`), err
+}
 
 // Adapter wraps domain services and handles Lambda API Gateway events.
 type Adapter struct {
@@ -54,7 +71,9 @@ func isWebhookPost(method, path string) bool {
 }
 
 // Router handles API Gateway proxy requests with API key validation.
-func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) Router(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	slog.InfoContext(ctx, "request", "method", req.HTTPMethod, "path", req.Path)
+
 	// Handle CORS preflight
 	if req.HTTPMethod == "OPTIONS" {
 		return jsonResponse(204, ""), nil
@@ -68,80 +87,85 @@ func (a *Adapter) Router(req events.APIGatewayProxyRequest) (events.APIGatewayPr
 		}
 	}
 
+	var resp events.APIGatewayProxyResponse
+
 	switch {
 	case req.Path == "/v1/status":
-		return a.handleStatus(req)
+		resp, _ = a.handleStatus(ctx, req)
 	case req.Path == "/v1/projects":
-		return a.handleProjects(req)
+		resp, _ = a.handleProjects(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/projects/"):
 		slug := strings.TrimPrefix(req.Path, "/v1/projects/")
-		return a.handleProject(req, slug)
+		resp, _ = a.handleProject(ctx, req, slug)
 	case req.Path == "/v1/metrics":
-		return a.handleMetrics(req)
+		resp, _ = a.handleMetrics(ctx, req)
 	case req.Path == "/v1/links":
-		return a.handleLinks(req)
+		resp, _ = a.handleLinks(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/links/"):
 		id := strings.TrimPrefix(req.Path, "/v1/links/")
-		return a.handleLink(req, id)
+		resp, _ = a.handleLink(ctx, req, id)
 	case req.Path == "/v1/notes":
-		return a.handleNotes(req)
+		resp, _ = a.handleNotes(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/notes/"):
 		id := strings.TrimPrefix(req.Path, "/v1/notes/")
-		return a.handleNote(req, id)
+		resp, _ = a.handleNote(ctx, req, id)
 	case req.Path == "/v1/til":
-		return a.handleTILs(req)
+		resp, _ = a.handleTILs(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/til/"):
 		id := strings.TrimPrefix(req.Path, "/v1/til/")
-		return a.handleTIL(req, id)
+		resp, _ = a.handleTIL(ctx, req, id)
 	case req.Path == "/v1/log":
-		return a.handleLogEntries(req)
+		resp, _ = a.handleLogEntries(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/log/"):
 		id := strings.TrimPrefix(req.Path, "/v1/log/")
-		return a.handleLogEntry(req, id)
+		resp, _ = a.handleLogEntry(ctx, req, id)
 	case req.Path == "/v1/mem/observations":
-		return a.handleMemObservations(req)
+		resp, _ = a.handleMemObservations(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/mem/observations/"):
 		id := strings.TrimPrefix(req.Path, "/v1/mem/observations/")
-		return a.handleMemObservation(req, id)
+		resp, _ = a.handleMemObservation(ctx, req, id)
 	case req.Path == "/v1/mem/summaries":
-		return a.handleMemSummaries(req)
+		resp, _ = a.handleMemSummaries(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/mem/summaries/"):
 		id := strings.TrimPrefix(req.Path, "/v1/mem/summaries/")
-		return a.handleMemSummary(req, id)
+		resp, _ = a.handleMemSummary(ctx, req, id)
 	case req.Path == "/v1/mem/prompts":
-		return a.handleMemPrompts(req)
+		resp, _ = a.handleMemPrompts(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/mem/prompts/"):
 		id := strings.TrimPrefix(req.Path, "/v1/mem/prompts/")
-		return a.handleMemPrompt(req, id)
+		resp, _ = a.handleMemPrompt(ctx, req, id)
 	case req.Path == "/v1/mem/stats":
-		return a.handleMemStats(req)
+		resp, _ = a.handleMemStats(ctx, req)
 	case req.Path == "/v1/diary":
-		return a.handleDiaryEntries(req)
+		resp, _ = a.handleDiaryEntries(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/diary/"):
 		id := strings.TrimPrefix(req.Path, "/v1/diary/")
-		return a.handleDiaryEntry(req, id)
+		resp, _ = a.handleDiaryEntry(ctx, req, id)
 	case req.Path == "/v1/memory":
-		return a.handleMemories(req)
+		resp, _ = a.handleMemories(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/memory/"):
 		id := strings.TrimPrefix(req.Path, "/v1/memory/")
-		return a.handleMemory(req, id)
+		resp, _ = a.handleMemory(ctx, req, id)
 	case req.Path == "/v1/webhooks":
-		return a.handleWebhooks(req)
+		resp, _ = a.handleWebhooks(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/webhooks/"):
 		id := strings.TrimPrefix(req.Path, "/v1/webhooks/")
-		return a.handleWebhookEvent(req, id)
+		resp, _ = a.handleWebhookEvent(ctx, req, id)
 	default:
-		return jsonResponse(404, `{"error":"not found"}`), nil
+		resp = jsonResponse(404, `{"error":"not found"}`)
 	}
+
+	slog.InfoContext(ctx, "response", "method", req.HTTPMethod, "path", req.Path, "status", resp.StatusCode)
+	return resp, nil
 }
 
 // handleMetrics handles GET /v1/metrics.
-func (a *Adapter) handleMetrics(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleMetrics(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if req.HTTPMethod != "GET" {
 		return jsonResponse(405, `{"error":"method not allowed"}`), nil
 	}
 
-	metrics, err := a.metricsService.GetMetrics()
+	metrics, err := a.metricsService.GetMetrics(ctx)
 	if err != nil {
 		return jsonResponse(500, `{"error":"internal server error"}`), err
 	}
@@ -153,10 +177,10 @@ func (a *Adapter) handleMetrics(req events.APIGatewayProxyRequest) (events.APIGa
 }
 
 // handleStatus routes GET and PUT for /v1/status.
-func (a *Adapter) handleStatus(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleStatus(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
-		status, err := a.service.GetStatus()
+		status, err := a.service.GetStatus(ctx)
 		if err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
@@ -171,7 +195,7 @@ func (a *Adapter) handleStatus(req events.APIGatewayProxyRequest) (events.APIGat
 		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.service.UpdateStatus(fields); err != nil {
+		if err := a.service.UpdateStatus(ctx, fields); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
@@ -182,10 +206,10 @@ func (a *Adapter) handleStatus(req events.APIGatewayProxyRequest) (events.APIGat
 }
 
 // handleProjects routes GET (list) and POST (create) for /v1/projects.
-func (a *Adapter) handleProjects(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleProjects(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
-		projects, err := a.service.GetProjects()
+		projects, err := a.service.GetProjects(ctx)
 		if err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
@@ -200,7 +224,7 @@ func (a *Adapter) handleProjects(req events.APIGatewayProxyRequest) (events.APIG
 		if err := json.Unmarshal([]byte(req.Body), &project); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.service.CreateProject(project); err != nil {
+		if err := a.service.CreateProject(ctx, project); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(201, `{"ok":true}`), nil
@@ -211,12 +235,12 @@ func (a *Adapter) handleProjects(req events.APIGatewayProxyRequest) (events.APIG
 }
 
 // handleProject routes GET, PUT, DELETE for /v1/projects/{slug}.
-func (a *Adapter) handleProject(req events.APIGatewayProxyRequest, slug string) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleProject(ctx context.Context, req events.APIGatewayProxyRequest, slug string) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
-		project, err := a.service.GetProject(slug)
+		project, err := a.service.GetProject(ctx, slug)
 		if err != nil {
-			return jsonResponse(404, `{"error":"project not found"}`), nil
+			return errorResponse(err)
 		}
 		body, err := json.Marshal(project)
 		if err != nil {
@@ -229,13 +253,13 @@ func (a *Adapter) handleProject(req events.APIGatewayProxyRequest, slug string) 
 		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.service.UpdateProject(slug, fields); err != nil {
+		if err := a.service.UpdateProject(ctx, slug, fields); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
 
 	case "DELETE":
-		if err := a.service.DeleteProject(slug); err != nil {
+		if err := a.service.DeleteProject(ctx, slug); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
@@ -246,11 +270,11 @@ func (a *Adapter) handleProject(req events.APIGatewayProxyRequest, slug string) 
 }
 
 // handleLinks routes GET (list) and POST (create) for /v1/links.
-func (a *Adapter) handleLinks(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleLinks(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
 		tag := req.QueryStringParameters["tag"]
-		links, err := a.service.GetLinks(tag)
+		links, err := a.service.GetLinks(ctx, tag)
 		if err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
@@ -265,7 +289,7 @@ func (a *Adapter) handleLinks(req events.APIGatewayProxyRequest) (events.APIGate
 		if err := json.Unmarshal([]byte(req.Body), &link); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.service.CreateLink(link); err != nil {
+		if err := a.service.CreateLink(ctx, link); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(201, `{"ok":true}`), nil
@@ -276,12 +300,12 @@ func (a *Adapter) handleLinks(req events.APIGatewayProxyRequest) (events.APIGate
 }
 
 // handleLink routes GET, PUT, DELETE for /v1/links/{id}.
-func (a *Adapter) handleLink(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleLink(ctx context.Context, req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
-		link, err := a.service.GetLink(id)
+		link, err := a.service.GetLink(ctx, id)
 		if err != nil {
-			return jsonResponse(404, `{"error":"link not found"}`), nil
+			return errorResponse(err)
 		}
 		body, err := json.Marshal(link)
 		if err != nil {
@@ -294,13 +318,13 @@ func (a *Adapter) handleLink(req events.APIGatewayProxyRequest, id string) (even
 		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.service.UpdateLink(id, fields); err != nil {
+		if err := a.service.UpdateLink(ctx, id, fields); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
 
 	case "DELETE":
-		if err := a.service.DeleteLink(id); err != nil {
+		if err := a.service.DeleteLink(ctx, id); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
@@ -311,11 +335,11 @@ func (a *Adapter) handleLink(req events.APIGatewayProxyRequest, id string) (even
 }
 
 // handleNotes routes GET (list) and POST (create) for /v1/notes.
-func (a *Adapter) handleNotes(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleNotes(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
 		tag := req.QueryStringParameters["tag"]
-		notes, err := a.service.GetNotes(tag)
+		notes, err := a.service.GetNotes(ctx, tag)
 		if err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
@@ -330,7 +354,7 @@ func (a *Adapter) handleNotes(req events.APIGatewayProxyRequest) (events.APIGate
 		if err := json.Unmarshal([]byte(req.Body), &note); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.service.CreateNote(note); err != nil {
+		if err := a.service.CreateNote(ctx, note); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(201, `{"ok":true}`), nil
@@ -341,12 +365,12 @@ func (a *Adapter) handleNotes(req events.APIGatewayProxyRequest) (events.APIGate
 }
 
 // handleNote routes GET, PUT, DELETE for /v1/notes/{id}.
-func (a *Adapter) handleNote(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleNote(ctx context.Context, req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
-		note, err := a.service.GetNote(id)
+		note, err := a.service.GetNote(ctx, id)
 		if err != nil {
-			return jsonResponse(404, `{"error":"note not found"}`), nil
+			return errorResponse(err)
 		}
 		body, err := json.Marshal(note)
 		if err != nil {
@@ -359,13 +383,13 @@ func (a *Adapter) handleNote(req events.APIGatewayProxyRequest, id string) (even
 		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.service.UpdateNote(id, fields); err != nil {
+		if err := a.service.UpdateNote(ctx, id, fields); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
 
 	case "DELETE":
-		if err := a.service.DeleteNote(id); err != nil {
+		if err := a.service.DeleteNote(ctx, id); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
@@ -376,11 +400,11 @@ func (a *Adapter) handleNote(req events.APIGatewayProxyRequest, id string) (even
 }
 
 // handleTILs routes GET (list) and POST (create) for /v1/til.
-func (a *Adapter) handleTILs(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleTILs(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
 		tag := req.QueryStringParameters["tag"]
-		tils, err := a.service.GetTILs(tag)
+		tils, err := a.service.GetTILs(ctx, tag)
 		if err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
@@ -395,7 +419,7 @@ func (a *Adapter) handleTILs(req events.APIGatewayProxyRequest) (events.APIGatew
 		if err := json.Unmarshal([]byte(req.Body), &til); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.service.CreateTIL(til); err != nil {
+		if err := a.service.CreateTIL(ctx, til); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(201, `{"ok":true}`), nil
@@ -406,12 +430,12 @@ func (a *Adapter) handleTILs(req events.APIGatewayProxyRequest) (events.APIGatew
 }
 
 // handleTIL routes GET, PUT, DELETE for /v1/til/{id}.
-func (a *Adapter) handleTIL(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleTIL(ctx context.Context, req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
-		til, err := a.service.GetTIL(id)
+		til, err := a.service.GetTIL(ctx, id)
 		if err != nil {
-			return jsonResponse(404, `{"error":"til not found"}`), nil
+			return errorResponse(err)
 		}
 		body, err := json.Marshal(til)
 		if err != nil {
@@ -424,13 +448,13 @@ func (a *Adapter) handleTIL(req events.APIGatewayProxyRequest, id string) (event
 		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.service.UpdateTIL(id, fields); err != nil {
+		if err := a.service.UpdateTIL(ctx, id, fields); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
 
 	case "DELETE":
-		if err := a.service.DeleteTIL(id); err != nil {
+		if err := a.service.DeleteTIL(ctx, id); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
@@ -441,11 +465,11 @@ func (a *Adapter) handleTIL(req events.APIGatewayProxyRequest, id string) (event
 }
 
 // handleLogEntries routes GET (list) and POST (create) for /v1/log.
-func (a *Adapter) handleLogEntries(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleLogEntries(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
 		tag := req.QueryStringParameters["tag"]
-		entries, err := a.service.GetLogEntries(tag)
+		entries, err := a.service.GetLogEntries(ctx, tag)
 		if err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
@@ -460,7 +484,7 @@ func (a *Adapter) handleLogEntries(req events.APIGatewayProxyRequest) (events.AP
 		if err := json.Unmarshal([]byte(req.Body), &entry); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.service.CreateLogEntry(entry); err != nil {
+		if err := a.service.CreateLogEntry(ctx, entry); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(201, `{"ok":true}`), nil
@@ -471,12 +495,12 @@ func (a *Adapter) handleLogEntries(req events.APIGatewayProxyRequest) (events.AP
 }
 
 // handleLogEntry routes GET, PUT, DELETE for /v1/log/{id}.
-func (a *Adapter) handleLogEntry(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleLogEntry(ctx context.Context, req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
-		entry, err := a.service.GetLogEntry(id)
+		entry, err := a.service.GetLogEntry(ctx, id)
 		if err != nil {
-			return jsonResponse(404, `{"error":"log entry not found"}`), nil
+			return errorResponse(err)
 		}
 		body, err := json.Marshal(entry)
 		if err != nil {
@@ -489,13 +513,13 @@ func (a *Adapter) handleLogEntry(req events.APIGatewayProxyRequest, id string) (
 		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.service.UpdateLogEntry(id, fields); err != nil {
+		if err := a.service.UpdateLogEntry(ctx, id, fields); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
 
 	case "DELETE":
-		if err := a.service.DeleteLogEntry(id); err != nil {
+		if err := a.service.DeleteLogEntry(ctx, id); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
@@ -506,13 +530,13 @@ func (a *Adapter) handleLogEntry(req events.APIGatewayProxyRequest, id string) (
 }
 
 // handleMemObservations handles GET /v1/mem/observations.
-func (a *Adapter) handleMemObservations(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleMemObservations(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if req.HTTPMethod != "GET" {
 		return jsonResponse(405, `{"error":"method not allowed"}`), nil
 	}
 	obsType := req.QueryStringParameters["type"]
 	project := req.QueryStringParameters["project"]
-	observations, err := a.memService.GetObservations(obsType, project)
+	observations, err := a.memService.GetObservations(ctx, obsType, project)
 	if err != nil {
 		return jsonResponse(500, `{"error":"internal server error"}`), err
 	}
@@ -524,13 +548,13 @@ func (a *Adapter) handleMemObservations(req events.APIGatewayProxyRequest) (even
 }
 
 // handleMemObservation handles GET /v1/mem/observations/{id}.
-func (a *Adapter) handleMemObservation(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleMemObservation(ctx context.Context, req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
 	if req.HTTPMethod != "GET" {
 		return jsonResponse(405, `{"error":"method not allowed"}`), nil
 	}
-	obs, err := a.memService.GetObservation(id)
+	obs, err := a.memService.GetObservation(ctx, id)
 	if err != nil {
-		return jsonResponse(404, `{"error":"observation not found"}`), nil
+		return errorResponse(err)
 	}
 	body, err := json.Marshal(obs)
 	if err != nil {
@@ -540,12 +564,12 @@ func (a *Adapter) handleMemObservation(req events.APIGatewayProxyRequest, id str
 }
 
 // handleMemSummaries handles GET /v1/mem/summaries.
-func (a *Adapter) handleMemSummaries(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleMemSummaries(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if req.HTTPMethod != "GET" {
 		return jsonResponse(405, `{"error":"method not allowed"}`), nil
 	}
 	project := req.QueryStringParameters["project"]
-	summaries, err := a.memService.GetSummaries(project)
+	summaries, err := a.memService.GetSummaries(ctx, project)
 	if err != nil {
 		return jsonResponse(500, `{"error":"internal server error"}`), err
 	}
@@ -557,13 +581,13 @@ func (a *Adapter) handleMemSummaries(req events.APIGatewayProxyRequest) (events.
 }
 
 // handleMemSummary handles GET /v1/mem/summaries/{id}.
-func (a *Adapter) handleMemSummary(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleMemSummary(ctx context.Context, req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
 	if req.HTTPMethod != "GET" {
 		return jsonResponse(405, `{"error":"method not allowed"}`), nil
 	}
-	summary, err := a.memService.GetSummary(id)
+	summary, err := a.memService.GetSummary(ctx, id)
 	if err != nil {
-		return jsonResponse(404, `{"error":"summary not found"}`), nil
+		return errorResponse(err)
 	}
 	body, err := json.Marshal(summary)
 	if err != nil {
@@ -573,11 +597,11 @@ func (a *Adapter) handleMemSummary(req events.APIGatewayProxyRequest, id string)
 }
 
 // handleMemPrompts handles GET /v1/mem/prompts.
-func (a *Adapter) handleMemPrompts(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleMemPrompts(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if req.HTTPMethod != "GET" {
 		return jsonResponse(405, `{"error":"method not allowed"}`), nil
 	}
-	prompts, err := a.memService.GetPrompts()
+	prompts, err := a.memService.GetPrompts(ctx)
 	if err != nil {
 		return jsonResponse(500, `{"error":"internal server error"}`), err
 	}
@@ -589,13 +613,13 @@ func (a *Adapter) handleMemPrompts(req events.APIGatewayProxyRequest) (events.AP
 }
 
 // handleMemPrompt handles GET /v1/mem/prompts/{id}.
-func (a *Adapter) handleMemPrompt(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleMemPrompt(ctx context.Context, req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
 	if req.HTTPMethod != "GET" {
 		return jsonResponse(405, `{"error":"method not allowed"}`), nil
 	}
-	prompt, err := a.memService.GetPrompt(id)
+	prompt, err := a.memService.GetPrompt(ctx, id)
 	if err != nil {
-		return jsonResponse(404, `{"error":"prompt not found"}`), nil
+		return errorResponse(err)
 	}
 	body, err := json.Marshal(prompt)
 	if err != nil {
@@ -605,11 +629,11 @@ func (a *Adapter) handleMemPrompt(req events.APIGatewayProxyRequest, id string) 
 }
 
 // handleMemStats handles GET /v1/mem/stats.
-func (a *Adapter) handleMemStats(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleMemStats(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if req.HTTPMethod != "GET" {
 		return jsonResponse(405, `{"error":"method not allowed"}`), nil
 	}
-	stats, err := a.memService.GetStats()
+	stats, err := a.memService.GetStats(ctx)
 	if err != nil {
 		return jsonResponse(500, `{"error":"internal server error"}`), err
 	}
@@ -621,11 +645,11 @@ func (a *Adapter) handleMemStats(req events.APIGatewayProxyRequest) (events.APIG
 }
 
 // handleDiaryEntries routes GET (list) and POST (create) for /v1/diary.
-func (a *Adapter) handleDiaryEntries(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleDiaryEntries(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
 		tag := req.QueryStringParameters["tag"]
-		entries, err := a.service.GetDiaryEntries(tag)
+		entries, err := a.service.GetDiaryEntries(ctx, tag)
 		if err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
@@ -641,7 +665,7 @@ func (a *Adapter) handleDiaryEntries(req events.APIGatewayProxyRequest) (events.
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
 		if a.diaryService != nil {
-			result, err := a.diaryService.CreateAndPublish(context.Background(), entry)
+			result, err := a.diaryService.CreateAndPublish(ctx, entry)
 			if err != nil {
 				return jsonResponse(500, `{"error":"internal server error"}`), err
 			}
@@ -651,7 +675,7 @@ func (a *Adapter) handleDiaryEntries(req events.APIGatewayProxyRequest) (events.
 			}
 			return jsonResponse(201, string(body)), nil
 		}
-		if err := a.service.CreateDiaryEntry(entry); err != nil {
+		if err := a.service.CreateDiaryEntry(ctx, entry); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(201, `{"ok":true}`), nil
@@ -662,12 +686,12 @@ func (a *Adapter) handleDiaryEntries(req events.APIGatewayProxyRequest) (events.
 }
 
 // handleDiaryEntry routes GET, PUT, DELETE for /v1/diary/{id}.
-func (a *Adapter) handleDiaryEntry(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleDiaryEntry(ctx context.Context, req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
-		entry, err := a.service.GetDiaryEntry(id)
+		entry, err := a.service.GetDiaryEntry(ctx, id)
 		if err != nil {
-			return jsonResponse(404, `{"error":"diary entry not found"}`), nil
+			return errorResponse(err)
 		}
 		body, err := json.Marshal(entry)
 		if err != nil {
@@ -680,13 +704,13 @@ func (a *Adapter) handleDiaryEntry(req events.APIGatewayProxyRequest, id string)
 		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.service.UpdateDiaryEntry(id, fields); err != nil {
+		if err := a.service.UpdateDiaryEntry(ctx, id, fields); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
 
 	case "DELETE":
-		if err := a.service.DeleteDiaryEntry(id); err != nil {
+		if err := a.service.DeleteDiaryEntry(ctx, id); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
@@ -697,11 +721,11 @@ func (a *Adapter) handleDiaryEntry(req events.APIGatewayProxyRequest, id string)
 }
 
 // handleMemories routes GET (list) and POST (create) for /v1/memory.
-func (a *Adapter) handleMemories(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleMemories(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
 		category := req.QueryStringParameters["category"]
-		memories, err := a.memService.GetMemories(category)
+		memories, err := a.memService.GetMemories(ctx, category)
 		if err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
@@ -716,7 +740,7 @@ func (a *Adapter) handleMemories(req events.APIGatewayProxyRequest) (events.APIG
 		if err := json.Unmarshal([]byte(req.Body), &memory); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.memService.CreateMemory(memory); err != nil {
+		if err := a.memService.CreateMemory(ctx, memory); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(201, `{"ok":true}`), nil
@@ -727,12 +751,12 @@ func (a *Adapter) handleMemories(req events.APIGatewayProxyRequest) (events.APIG
 }
 
 // handleMemory routes GET, PUT, DELETE for /v1/memory/{id}.
-func (a *Adapter) handleMemory(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleMemory(ctx context.Context, req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
-		memory, err := a.memService.GetMemory(id)
+		memory, err := a.memService.GetMemory(ctx, id)
 		if err != nil {
-			return jsonResponse(404, `{"error":"memory not found"}`), nil
+			return errorResponse(err)
 		}
 		body, err := json.Marshal(memory)
 		if err != nil {
@@ -745,13 +769,13 @@ func (a *Adapter) handleMemory(req events.APIGatewayProxyRequest, id string) (ev
 		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.memService.UpdateMemory(id, fields); err != nil {
+		if err := a.memService.UpdateMemory(ctx, id, fields); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
 
 	case "DELETE":
-		if err := a.memService.DeleteMemory(id); err != nil {
+		if err := a.memService.DeleteMemory(ctx, id); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(200, `{"ok":true}`), nil
@@ -763,12 +787,12 @@ func (a *Adapter) handleMemory(req events.APIGatewayProxyRequest, id string) (ev
 
 // handleWebhooks routes GET (list) and POST (create) for /v1/webhooks.
 // AIDEV-NOTE: POST uses HMAC auth (not API key). GET uses normal API key auth.
-func (a *Adapter) handleWebhooks(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleWebhooks(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	switch req.HTTPMethod {
 	case "GET":
 		eventType := req.QueryStringParameters["type"]
 		source := req.QueryStringParameters["source"]
-		events, err := a.webhookService.GetWebhookEvents(eventType, source)
+		events, err := a.webhookService.GetWebhookEvents(ctx, eventType, source)
 		if err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
@@ -791,10 +815,12 @@ func (a *Adapter) handleWebhooks(req events.APIGatewayProxyRequest) (events.APIG
 		}
 
 		var event domain.WebhookEvent
-		if err := json.Unmarshal([]byte(req.Body), &event); err != nil {
+		dec := json.NewDecoder(strings.NewReader(req.Body))
+		dec.UseNumber()
+		if err := dec.Decode(&event); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.webhookService.CreateWebhookEvent(event); err != nil {
+		if err := a.webhookService.CreateWebhookEvent(ctx, event); err != nil {
 			return jsonResponse(500, `{"error":"internal server error"}`), err
 		}
 		return jsonResponse(201, `{"ok":true}`), nil
@@ -805,13 +831,13 @@ func (a *Adapter) handleWebhooks(req events.APIGatewayProxyRequest) (events.APIG
 }
 
 // handleWebhookEvent handles GET /v1/webhooks/{id}.
-func (a *Adapter) handleWebhookEvent(req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+func (a *Adapter) handleWebhookEvent(ctx context.Context, req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
 	if req.HTTPMethod != "GET" {
 		return jsonResponse(405, `{"error":"method not allowed"}`), nil
 	}
-	event, err := a.webhookService.GetWebhookEvent(id)
+	event, err := a.webhookService.GetWebhookEvent(ctx, id)
 	if err != nil {
-		return jsonResponse(404, `{"error":"webhook event not found"}`), nil
+		return errorResponse(err)
 	}
 	body, err := json.Marshal(event)
 	if err != nil {

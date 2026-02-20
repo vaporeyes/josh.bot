@@ -53,8 +53,8 @@ func NewBotService(client DynamoDBClient, tableName string) *BotService {
 // --- Status Operations ---
 
 // GetStatus fetches the status item from DynamoDB.
-func (s *BotService) GetStatus() (domain.Status, error) {
-	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+func (s *BotService) GetStatus(ctx context.Context) (domain.Status, error) {
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "status"},
@@ -64,7 +64,7 @@ func (s *BotService) GetStatus() (domain.Status, error) {
 		return domain.Status{}, fmt.Errorf("dynamodb GetItem: %w", err)
 	}
 	if output.Item == nil {
-		return domain.Status{}, fmt.Errorf("status item not found in table %s", s.tableName)
+		return domain.Status{}, &domain.NotFoundError{Resource: "status", ID: s.tableName}
 	}
 
 	var status domain.Status
@@ -77,7 +77,7 @@ func (s *BotService) GetStatus() (domain.Status, error) {
 
 // UpdateStatus updates specific fields on the status item in DynamoDB.
 // Only fields in the allowlist are accepted. updated_at is set automatically.
-func (s *BotService) UpdateStatus(fields map[string]any) error {
+func (s *BotService) UpdateStatus(ctx context.Context, fields map[string]any) error {
 	if len(fields) == 0 {
 		return fmt.Errorf("no fields provided for update")
 	}
@@ -88,16 +88,16 @@ func (s *BotService) UpdateStatus(fields map[string]any) error {
 		}
 	}
 
-	return s.updateItem("status", fields)
+	return s.updateItem(ctx, "status", fields)
 }
 
 // --- Project Operations ---
 
 // GetProjects fetches all projects from DynamoDB using a Scan with a filter.
 // AIDEV-NOTE: Uses Scan instead of Query because the table has no sort key.
-func (s *BotService) GetProjects() ([]domain.Project, error) {
+func (s *BotService) GetProjects(ctx context.Context) ([]domain.Project, error) {
 	filterExpr := "begins_with(id, :prefix)"
-	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
 		TableName:        &s.tableName,
 		FilterExpression: &filterExpr,
 		ExpressionAttributeValues: map[string]types.AttributeValue{
@@ -121,8 +121,8 @@ func (s *BotService) GetProjects() ([]domain.Project, error) {
 }
 
 // GetProject fetches a single project by slug from DynamoDB.
-func (s *BotService) GetProject(slug string) (domain.Project, error) {
-	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+func (s *BotService) GetProject(ctx context.Context, slug string) (domain.Project, error) {
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "project#" + slug},
@@ -132,7 +132,7 @@ func (s *BotService) GetProject(slug string) (domain.Project, error) {
 		return domain.Project{}, fmt.Errorf("dynamodb GetItem: %w", err)
 	}
 	if output.Item == nil {
-		return domain.Project{}, fmt.Errorf("project %q not found", slug)
+		return domain.Project{}, &domain.NotFoundError{Resource: "project", ID: slug}
 	}
 
 	var project domain.Project
@@ -144,7 +144,10 @@ func (s *BotService) GetProject(slug string) (domain.Project, error) {
 }
 
 // CreateProject adds a new project to DynamoDB.
-func (s *BotService) CreateProject(project domain.Project) error {
+func (s *BotService) CreateProject(ctx context.Context, project domain.Project) error {
+	if err := project.Validate(); err != nil {
+		return err
+	}
 	project.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
 	item, err := attributevalue.MarshalMap(project)
@@ -154,7 +157,7 @@ func (s *BotService) CreateProject(project domain.Project) error {
 	// Set the partition key using the slug
 	item["id"] = &types.AttributeValueMemberS{Value: "project#" + project.Slug}
 
-	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
 		Item:      item,
 	})
@@ -167,7 +170,7 @@ func (s *BotService) CreateProject(project domain.Project) error {
 
 // UpdateProject updates specific fields on a project in DynamoDB.
 // Only fields in the allowlist are accepted. updated_at is set automatically.
-func (s *BotService) UpdateProject(slug string, fields map[string]any) error {
+func (s *BotService) UpdateProject(ctx context.Context, slug string, fields map[string]any) error {
 	if len(fields) == 0 {
 		return fmt.Errorf("no fields provided for update")
 	}
@@ -178,12 +181,12 @@ func (s *BotService) UpdateProject(slug string, fields map[string]any) error {
 		}
 	}
 
-	return s.updateItem("project#"+slug, fields)
+	return s.updateItem(ctx, "project#"+slug, fields)
 }
 
 // DeleteProject removes a project from DynamoDB.
-func (s *BotService) DeleteProject(slug string) error {
-	_, err := s.client.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+func (s *BotService) DeleteProject(ctx context.Context, slug string) error {
+	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "project#" + slug},
@@ -203,7 +206,7 @@ var allowedLinkFields = map[string]bool{
 // --- Link Operations ---
 
 // GetLinks fetches all links from DynamoDB, optionally filtered by tag.
-func (s *BotService) GetLinks(tag string) ([]domain.Link, error) {
+func (s *BotService) GetLinks(ctx context.Context, tag string) ([]domain.Link, error) {
 	filterExpr := "begins_with(id, :prefix)"
 	exprValues := map[string]types.AttributeValue{
 		":prefix": &types.AttributeValueMemberS{Value: "link#"},
@@ -214,7 +217,7 @@ func (s *BotService) GetLinks(tag string) ([]domain.Link, error) {
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
 		TableName:                 &s.tableName,
 		FilterExpression:          &filterExpr,
 		ExpressionAttributeValues: exprValues,
@@ -236,8 +239,8 @@ func (s *BotService) GetLinks(tag string) ([]domain.Link, error) {
 }
 
 // GetLink fetches a single link by ID from DynamoDB.
-func (s *BotService) GetLink(id string) (domain.Link, error) {
-	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+func (s *BotService) GetLink(ctx context.Context, id string) (domain.Link, error) {
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "link#" + id},
@@ -247,7 +250,7 @@ func (s *BotService) GetLink(id string) (domain.Link, error) {
 		return domain.Link{}, fmt.Errorf("dynamodb GetItem: %w", err)
 	}
 	if output.Item == nil {
-		return domain.Link{}, fmt.Errorf("link %q not found", id)
+		return domain.Link{}, &domain.NotFoundError{Resource: "link", ID: id}
 	}
 
 	var link domain.Link
@@ -260,7 +263,10 @@ func (s *BotService) GetLink(id string) (domain.Link, error) {
 
 // CreateLink adds a new link to DynamoDB.
 // The ID is generated from the URL hash, providing automatic deduplication.
-func (s *BotService) CreateLink(link domain.Link) error {
+func (s *BotService) CreateLink(ctx context.Context, link domain.Link) error {
+	if err := link.Validate(); err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	link.ID = "link#" + domain.LinkIDFromURL(link.URL)
 	link.CreatedAt = now
@@ -271,7 +277,7 @@ func (s *BotService) CreateLink(link domain.Link) error {
 		return fmt.Errorf("marshal link: %w", err)
 	}
 
-	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
 		Item:      item,
 	})
@@ -283,7 +289,7 @@ func (s *BotService) CreateLink(link domain.Link) error {
 }
 
 // UpdateLink updates specific fields on a link in DynamoDB.
-func (s *BotService) UpdateLink(id string, fields map[string]any) error {
+func (s *BotService) UpdateLink(ctx context.Context, id string, fields map[string]any) error {
 	if len(fields) == 0 {
 		return fmt.Errorf("no fields provided for update")
 	}
@@ -294,12 +300,12 @@ func (s *BotService) UpdateLink(id string, fields map[string]any) error {
 		}
 	}
 
-	return s.updateItem("link#"+id, fields)
+	return s.updateItem(ctx, "link#"+id, fields)
 }
 
 // DeleteLink removes a link from DynamoDB.
-func (s *BotService) DeleteLink(id string) error {
-	_, err := s.client.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+func (s *BotService) DeleteLink(ctx context.Context, id string) error {
+	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "link#" + id},
@@ -319,7 +325,7 @@ var allowedNoteFields = map[string]bool{
 // --- Note Operations ---
 
 // GetNotes fetches all notes from DynamoDB, optionally filtered by tag.
-func (s *BotService) GetNotes(tag string) ([]domain.Note, error) {
+func (s *BotService) GetNotes(ctx context.Context, tag string) ([]domain.Note, error) {
 	filterExpr := "begins_with(id, :prefix)"
 	exprValues := map[string]types.AttributeValue{
 		":prefix": &types.AttributeValueMemberS{Value: "note#"},
@@ -330,7 +336,7 @@ func (s *BotService) GetNotes(tag string) ([]domain.Note, error) {
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
 		TableName:                 &s.tableName,
 		FilterExpression:          &filterExpr,
 		ExpressionAttributeValues: exprValues,
@@ -352,8 +358,8 @@ func (s *BotService) GetNotes(tag string) ([]domain.Note, error) {
 }
 
 // GetNote fetches a single note by ID from DynamoDB.
-func (s *BotService) GetNote(id string) (domain.Note, error) {
-	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+func (s *BotService) GetNote(ctx context.Context, id string) (domain.Note, error) {
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "note#" + id},
@@ -363,7 +369,7 @@ func (s *BotService) GetNote(id string) (domain.Note, error) {
 		return domain.Note{}, fmt.Errorf("dynamodb GetItem: %w", err)
 	}
 	if output.Item == nil {
-		return domain.Note{}, fmt.Errorf("note %q not found", id)
+		return domain.Note{}, &domain.NotFoundError{Resource: "note", ID: id}
 	}
 
 	var note domain.Note
@@ -375,7 +381,10 @@ func (s *BotService) GetNote(id string) (domain.Note, error) {
 }
 
 // CreateNote adds a new note to DynamoDB with a generated random ID.
-func (s *BotService) CreateNote(note domain.Note) error {
+func (s *BotService) CreateNote(ctx context.Context, note domain.Note) error {
+	if err := note.Validate(); err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	note.ID = domain.NoteID()
 	note.CreatedAt = now
@@ -386,7 +395,7 @@ func (s *BotService) CreateNote(note domain.Note) error {
 		return fmt.Errorf("marshal note: %w", err)
 	}
 
-	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
 		Item:      item,
 	})
@@ -398,7 +407,7 @@ func (s *BotService) CreateNote(note domain.Note) error {
 }
 
 // UpdateNote updates specific fields on a note in DynamoDB.
-func (s *BotService) UpdateNote(id string, fields map[string]any) error {
+func (s *BotService) UpdateNote(ctx context.Context, id string, fields map[string]any) error {
 	if len(fields) == 0 {
 		return fmt.Errorf("no fields provided for update")
 	}
@@ -409,12 +418,12 @@ func (s *BotService) UpdateNote(id string, fields map[string]any) error {
 		}
 	}
 
-	return s.updateItem("note#"+id, fields)
+	return s.updateItem(ctx, "note#"+id, fields)
 }
 
 // DeleteNote removes a note from DynamoDB.
-func (s *BotService) DeleteNote(id string) error {
-	_, err := s.client.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+func (s *BotService) DeleteNote(ctx context.Context, id string) error {
+	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "note#" + id},
@@ -434,7 +443,7 @@ var allowedTILFields = map[string]bool{
 // --- TIL Operations ---
 
 // GetTILs fetches all TIL entries from DynamoDB, optionally filtered by tag.
-func (s *BotService) GetTILs(tag string) ([]domain.TIL, error) {
+func (s *BotService) GetTILs(ctx context.Context, tag string) ([]domain.TIL, error) {
 	filterExpr := "begins_with(id, :prefix)"
 	exprValues := map[string]types.AttributeValue{
 		":prefix": &types.AttributeValueMemberS{Value: "til#"},
@@ -445,7 +454,7 @@ func (s *BotService) GetTILs(tag string) ([]domain.TIL, error) {
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
 		TableName:                 &s.tableName,
 		FilterExpression:          &filterExpr,
 		ExpressionAttributeValues: exprValues,
@@ -467,8 +476,8 @@ func (s *BotService) GetTILs(tag string) ([]domain.TIL, error) {
 }
 
 // GetTIL fetches a single TIL entry by ID from DynamoDB.
-func (s *BotService) GetTIL(id string) (domain.TIL, error) {
-	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+func (s *BotService) GetTIL(ctx context.Context, id string) (domain.TIL, error) {
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "til#" + id},
@@ -478,7 +487,7 @@ func (s *BotService) GetTIL(id string) (domain.TIL, error) {
 		return domain.TIL{}, fmt.Errorf("dynamodb GetItem: %w", err)
 	}
 	if output.Item == nil {
-		return domain.TIL{}, fmt.Errorf("til %q not found", id)
+		return domain.TIL{}, &domain.NotFoundError{Resource: "til", ID: id}
 	}
 
 	var til domain.TIL
@@ -490,7 +499,10 @@ func (s *BotService) GetTIL(id string) (domain.TIL, error) {
 }
 
 // CreateTIL adds a new TIL entry to DynamoDB with a generated random ID.
-func (s *BotService) CreateTIL(til domain.TIL) error {
+func (s *BotService) CreateTIL(ctx context.Context, til domain.TIL) error {
+	if err := til.Validate(); err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	til.ID = domain.TILID()
 	til.CreatedAt = now
@@ -501,7 +513,7 @@ func (s *BotService) CreateTIL(til domain.TIL) error {
 		return fmt.Errorf("marshal til: %w", err)
 	}
 
-	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
 		Item:      item,
 	})
@@ -513,7 +525,7 @@ func (s *BotService) CreateTIL(til domain.TIL) error {
 }
 
 // UpdateTIL updates specific fields on a TIL entry in DynamoDB.
-func (s *BotService) UpdateTIL(id string, fields map[string]any) error {
+func (s *BotService) UpdateTIL(ctx context.Context, id string, fields map[string]any) error {
 	if len(fields) == 0 {
 		return fmt.Errorf("no fields provided for update")
 	}
@@ -524,12 +536,12 @@ func (s *BotService) UpdateTIL(id string, fields map[string]any) error {
 		}
 	}
 
-	return s.updateItem("til#"+id, fields)
+	return s.updateItem(ctx, "til#"+id, fields)
 }
 
 // DeleteTIL removes a TIL entry from DynamoDB.
-func (s *BotService) DeleteTIL(id string) error {
-	_, err := s.client.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+func (s *BotService) DeleteTIL(ctx context.Context, id string) error {
+	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "til#" + id},
@@ -549,7 +561,7 @@ var allowedLogEntryFields = map[string]bool{
 // --- Log Entry Operations ---
 
 // GetLogEntries fetches all log entries from DynamoDB, optionally filtered by tag.
-func (s *BotService) GetLogEntries(tag string) ([]domain.LogEntry, error) {
+func (s *BotService) GetLogEntries(ctx context.Context, tag string) ([]domain.LogEntry, error) {
 	filterExpr := "begins_with(id, :prefix)"
 	exprValues := map[string]types.AttributeValue{
 		":prefix": &types.AttributeValueMemberS{Value: "log#"},
@@ -560,7 +572,7 @@ func (s *BotService) GetLogEntries(tag string) ([]domain.LogEntry, error) {
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
 		TableName:                 &s.tableName,
 		FilterExpression:          &filterExpr,
 		ExpressionAttributeValues: exprValues,
@@ -582,8 +594,8 @@ func (s *BotService) GetLogEntries(tag string) ([]domain.LogEntry, error) {
 }
 
 // GetLogEntry fetches a single log entry by ID from DynamoDB.
-func (s *BotService) GetLogEntry(id string) (domain.LogEntry, error) {
-	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+func (s *BotService) GetLogEntry(ctx context.Context, id string) (domain.LogEntry, error) {
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "log#" + id},
@@ -593,7 +605,7 @@ func (s *BotService) GetLogEntry(id string) (domain.LogEntry, error) {
 		return domain.LogEntry{}, fmt.Errorf("dynamodb GetItem: %w", err)
 	}
 	if output.Item == nil {
-		return domain.LogEntry{}, fmt.Errorf("log entry %q not found", id)
+		return domain.LogEntry{}, &domain.NotFoundError{Resource: "log entry", ID: id}
 	}
 
 	var entry domain.LogEntry
@@ -605,7 +617,10 @@ func (s *BotService) GetLogEntry(id string) (domain.LogEntry, error) {
 }
 
 // CreateLogEntry adds a new log entry to DynamoDB with a generated random ID.
-func (s *BotService) CreateLogEntry(entry domain.LogEntry) error {
+func (s *BotService) CreateLogEntry(ctx context.Context, entry domain.LogEntry) error {
+	if err := entry.Validate(); err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	entry.ID = domain.LogEntryID()
 	entry.CreatedAt = now
@@ -616,7 +631,7 @@ func (s *BotService) CreateLogEntry(entry domain.LogEntry) error {
 		return fmt.Errorf("marshal log entry: %w", err)
 	}
 
-	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
 		Item:      item,
 	})
@@ -628,7 +643,7 @@ func (s *BotService) CreateLogEntry(entry domain.LogEntry) error {
 }
 
 // UpdateLogEntry updates specific fields on a log entry in DynamoDB.
-func (s *BotService) UpdateLogEntry(id string, fields map[string]any) error {
+func (s *BotService) UpdateLogEntry(ctx context.Context, id string, fields map[string]any) error {
 	if len(fields) == 0 {
 		return fmt.Errorf("no fields provided for update")
 	}
@@ -639,12 +654,12 @@ func (s *BotService) UpdateLogEntry(id string, fields map[string]any) error {
 		}
 	}
 
-	return s.updateItem("log#"+id, fields)
+	return s.updateItem(ctx, "log#"+id, fields)
 }
 
 // DeleteLogEntry removes a log entry from DynamoDB.
-func (s *BotService) DeleteLogEntry(id string) error {
-	_, err := s.client.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+func (s *BotService) DeleteLogEntry(ctx context.Context, id string) error {
+	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "log#" + id},
@@ -665,7 +680,7 @@ var allowedDiaryEntryFields = map[string]bool{
 // --- Diary Entry Operations ---
 
 // GetDiaryEntries fetches all diary entries from DynamoDB, optionally filtered by tag.
-func (s *BotService) GetDiaryEntries(tag string) ([]domain.DiaryEntry, error) {
+func (s *BotService) GetDiaryEntries(ctx context.Context, tag string) ([]domain.DiaryEntry, error) {
 	filterExpr := "begins_with(id, :prefix)"
 	exprValues := map[string]types.AttributeValue{
 		":prefix": &types.AttributeValueMemberS{Value: "diary#"},
@@ -676,7 +691,7 @@ func (s *BotService) GetDiaryEntries(tag string) ([]domain.DiaryEntry, error) {
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
 		TableName:                 &s.tableName,
 		FilterExpression:          &filterExpr,
 		ExpressionAttributeValues: exprValues,
@@ -698,8 +713,8 @@ func (s *BotService) GetDiaryEntries(tag string) ([]domain.DiaryEntry, error) {
 }
 
 // GetDiaryEntry fetches a single diary entry by ID from DynamoDB.
-func (s *BotService) GetDiaryEntry(id string) (domain.DiaryEntry, error) {
-	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+func (s *BotService) GetDiaryEntry(ctx context.Context, id string) (domain.DiaryEntry, error) {
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "diary#" + id},
@@ -709,7 +724,7 @@ func (s *BotService) GetDiaryEntry(id string) (domain.DiaryEntry, error) {
 		return domain.DiaryEntry{}, fmt.Errorf("dynamodb GetItem: %w", err)
 	}
 	if output.Item == nil {
-		return domain.DiaryEntry{}, fmt.Errorf("diary entry %q not found", id)
+		return domain.DiaryEntry{}, &domain.NotFoundError{Resource: "diary entry", ID: id}
 	}
 
 	var entry domain.DiaryEntry
@@ -722,7 +737,10 @@ func (s *BotService) GetDiaryEntry(id string) (domain.DiaryEntry, error) {
 
 // CreateDiaryEntry adds a new diary entry to DynamoDB.
 // AIDEV-NOTE: ID and timestamps are set here if not already provided by the caller.
-func (s *BotService) CreateDiaryEntry(entry domain.DiaryEntry) error {
+func (s *BotService) CreateDiaryEntry(ctx context.Context, entry domain.DiaryEntry) error {
+	if err := entry.Validate(); err != nil {
+		return err
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	if entry.ID == "" {
 		entry.ID = domain.DiaryEntryID()
@@ -739,7 +757,7 @@ func (s *BotService) CreateDiaryEntry(entry domain.DiaryEntry) error {
 		return fmt.Errorf("marshal diary entry: %w", err)
 	}
 
-	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
 		Item:      item,
 	})
@@ -751,7 +769,7 @@ func (s *BotService) CreateDiaryEntry(entry domain.DiaryEntry) error {
 }
 
 // UpdateDiaryEntry updates specific fields on a diary entry in DynamoDB.
-func (s *BotService) UpdateDiaryEntry(id string, fields map[string]any) error {
+func (s *BotService) UpdateDiaryEntry(ctx context.Context, id string, fields map[string]any) error {
 	if len(fields) == 0 {
 		return fmt.Errorf("no fields provided for update")
 	}
@@ -762,12 +780,12 @@ func (s *BotService) UpdateDiaryEntry(id string, fields map[string]any) error {
 		}
 	}
 
-	return s.updateItem("diary#"+id, fields)
+	return s.updateItem(ctx, "diary#"+id, fields)
 }
 
 // DeleteDiaryEntry removes a diary entry from DynamoDB.
-func (s *BotService) DeleteDiaryEntry(id string) error {
-	_, err := s.client.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+func (s *BotService) DeleteDiaryEntry(ctx context.Context, id string) error {
+	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "diary#" + id},
@@ -783,7 +801,7 @@ func (s *BotService) DeleteDiaryEntry(id string) error {
 
 // updateItem builds and executes a DynamoDB UpdateItem with SET expression.
 // Automatically adds updated_at timestamp.
-func (s *BotService) updateItem(id string, fields map[string]any) error {
+func (s *BotService) updateItem(ctx context.Context, id string, fields map[string]any) error {
 	fields["updated_at"] = time.Now().UTC().Format(time.RFC3339)
 
 	var setParts []string
@@ -805,7 +823,7 @@ func (s *BotService) updateItem(id string, fields map[string]any) error {
 
 	updateExpr := "SET " + strings.Join(setParts, ", ")
 
-	_, err := s.client.UpdateItem(context.Background(), &dynamodb.UpdateItemInput{
+	_, err := s.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: id},

@@ -3,7 +3,7 @@
 package mock
 
 import (
-	"fmt"
+	"context"
 
 	"github.com/jduncan/josh-bot/internal/domain"
 )
@@ -17,12 +17,12 @@ func NewWebhookService() *WebhookService {
 }
 
 // CreateWebhookEvent is a no-op in the mock adapter.
-func (s *WebhookService) CreateWebhookEvent(event domain.WebhookEvent) error {
+func (s *WebhookService) CreateWebhookEvent(_ context.Context, event domain.WebhookEvent) error {
 	return nil
 }
 
 // GetWebhookEvents returns hardcoded events, optionally filtered by type and source.
-func (s *WebhookService) GetWebhookEvents(eventType, source string) ([]domain.WebhookEvent, error) {
+func (s *WebhookService) GetWebhookEvents(_ context.Context, eventType, source string) ([]domain.WebhookEvent, error) {
 	events := []domain.WebhookEvent{
 		{
 			ID:        "webhook#abc123def456",
@@ -58,12 +58,12 @@ func (s *WebhookService) GetWebhookEvents(eventType, source string) ([]domain.We
 }
 
 // GetWebhookEvent returns a hardcoded event by ID.
-func (s *WebhookService) GetWebhookEvent(id string) (domain.WebhookEvent, error) {
-	events, _ := s.GetWebhookEvents("", "")
+func (s *WebhookService) GetWebhookEvent(_ context.Context, id string) (domain.WebhookEvent, error) {
+	events, _ := s.GetWebhookEvents(context.Background(), "", "")
 	for _, e := range events {
 		if e.ID == id || e.ID == "webhook#"+id {
 			return e, nil
 		}
 	}
-	return domain.WebhookEvent{}, fmt.Errorf("webhook event %q not found", id)
+	return domain.WebhookEvent{}, &domain.NotFoundError{Resource: "webhook event", ID: id}
 }

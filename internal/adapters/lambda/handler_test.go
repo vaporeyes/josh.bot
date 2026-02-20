@@ -3,6 +3,7 @@
 package lambda
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -22,7 +23,7 @@ func TestRouter_ValidAPIKey(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "test-secret-key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -42,7 +43,7 @@ func TestRouter_InvalidAPIKey_ProtectedRoute(t *testing.T) {
 		Body:       `{"status":"busy"}`,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -62,7 +63,7 @@ func TestRouter_MissingAPIKey_ProtectedRoute(t *testing.T) {
 		Body:       `{"status":"busy"}`,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestRouter_GetStatus_NoAPIKey_PublicRoute(t *testing.T) {
 		Headers:    map[string]string{},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -100,7 +101,7 @@ func TestRouter_NoAPIKeyConfigured(t *testing.T) {
 		Headers:    map[string]string{},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -119,7 +120,7 @@ func TestRouter_StatusEndpoint(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -156,7 +157,7 @@ func TestRouter_ProjectsEndpoint(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -179,7 +180,7 @@ func TestRouter_PutStatus_Success(t *testing.T) {
 		Body:       `{"current_activity": "Deploying josh.bot", "availability": "Heads down"}`,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -199,7 +200,7 @@ func TestRouter_PutStatus_InvalidJSON(t *testing.T) {
 		Body:       `{not valid json`,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -219,7 +220,7 @@ func TestRouter_PostStatus_MethodNotAllowed(t *testing.T) {
 		Body:       `{"status": "busy"}`,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -238,7 +239,7 @@ func TestRouter_PutProjects_MethodNotAllowed(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -258,7 +259,7 @@ func TestRouter_PostProject_Success(t *testing.T) {
 		Body:       `{"slug":"new-proj","name":"New Project","stack":"Go","description":"A thing","url":"https://github.com/vaporeyes/new","status":"active"}`,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -278,7 +279,7 @@ func TestRouter_PostProject_InvalidJSON(t *testing.T) {
 		Body:       `{bad json`,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -297,7 +298,7 @@ func TestRouter_GetProject_Success(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -325,7 +326,7 @@ func TestRouter_PutProject_Success(t *testing.T) {
 		Body:       `{"status":"archived"}`,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -344,7 +345,7 @@ func TestRouter_DeleteProject_Success(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -363,7 +364,7 @@ func TestRouter_GetLinks_Success(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -386,7 +387,7 @@ func TestRouter_GetLinks_FilterByTag(t *testing.T) {
 		QueryStringParameters: map[string]string{"tag": "aws"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -412,7 +413,7 @@ func TestRouter_PostLink_Success(t *testing.T) {
 		Body:       `{"url":"https://example.com","title":"Example","tags":["test"]}`,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -432,7 +433,7 @@ func TestRouter_PostLink_InvalidJSON(t *testing.T) {
 		Body:       `{bad json`,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -451,7 +452,7 @@ func TestRouter_GetLink_Success(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -471,7 +472,7 @@ func TestRouter_PutLink_Success(t *testing.T) {
 		Body:       `{"title":"Updated Title"}`,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -490,7 +491,7 @@ func TestRouter_DeleteLink_Success(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -509,7 +510,7 @@ func TestRouter_GetDiaryEntries_Success(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -532,7 +533,7 @@ func TestRouter_PostDiaryEntry_Success(t *testing.T) {
 		Body:       `{"context":"Monday morning","body":"Shipped the API","reaction":"Proud","takeaway":"Ship early","tags":["work"]}`,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -552,7 +553,7 @@ func TestRouter_PostDiaryEntry_InvalidJSON(t *testing.T) {
 		Body:       `{bad json`,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -571,7 +572,7 @@ func TestRouter_GetDiaryEntry_Success(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -598,7 +599,7 @@ func TestRouter_GetDiaryEntry_NotFound(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -617,7 +618,7 @@ func TestRouter_DeleteDiaryEntry_Success(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -649,7 +650,7 @@ func TestRouter_PostWebhook_ValidSignature(t *testing.T) {
 		Body:       body,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -669,7 +670,7 @@ func TestRouter_PostWebhook_InvalidSignature(t *testing.T) {
 		Body:       body,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -689,7 +690,7 @@ func TestRouter_PostWebhook_MissingSignature(t *testing.T) {
 		Body:       body,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -712,7 +713,7 @@ func TestRouter_PostWebhook_NoSecretConfigured(t *testing.T) {
 		Body:       body,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -733,7 +734,7 @@ func TestRouter_PostWebhook_InvalidJSON(t *testing.T) {
 		Body:       body,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -751,7 +752,7 @@ func TestRouter_GetWebhooks_Success(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -776,7 +777,7 @@ func TestRouter_GetWebhooks_FilterByType(t *testing.T) {
 		QueryStringParameters: map[string]string{"type": "alert"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -801,7 +802,7 @@ func TestRouter_GetWebhooks_FilterBySource(t *testing.T) {
 		QueryStringParameters: map[string]string{"source": "k8-one"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -825,7 +826,7 @@ func TestRouter_GetWebhookEvent_Success(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -851,7 +852,7 @@ func TestRouter_GetWebhookEvent_NotFound(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -869,7 +870,7 @@ func TestRouter_DeleteWebhook_MethodNotAllowed(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -890,13 +891,55 @@ func TestRouter_PostWebhook_CORSHeaders(t *testing.T) {
 		Body:       body,
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	allowHeaders := resp.Headers["Access-Control-Allow-Headers"]
 	if !strings.Contains(allowHeaders, "x-webhook-signature") {
 		t.Errorf("expected x-webhook-signature in CORS allow headers, got: %s", allowHeaders)
+	}
+}
+
+// capturingWebhookService records the event passed to CreateWebhookEvent.
+type capturingWebhookService struct {
+	mock.WebhookService
+	captured domain.WebhookEvent
+}
+
+func (s *capturingWebhookService) CreateWebhookEvent(_ context.Context, event domain.WebhookEvent) error {
+	s.captured = event
+	return nil
+}
+
+func TestRouter_PostWebhook_LargeNumberPrecision(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+	capture := &capturingWebhookService{}
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService(), mock.NewMemService())
+	adapter.SetWebhookService(capture, "test-webhook-secret")
+
+	body := `{"type":"message","source":"test","payload":{"big_id":1234567890123456789}}`
+	sig := "sha256=" + domain.ComputeWebhookSignature(body, "test-webhook-secret")
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/webhooks",
+		Headers:    map[string]string{"x-webhook-signature": sig},
+		Body:       body,
+	}
+
+	resp, err := adapter.Router(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 201 {
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, resp.Body)
+	}
+
+	val := capture.captured.Payload["big_id"]
+	// With UseNumber(), this should be json.Number, not float64
+	if _, ok := val.(json.Number); !ok {
+		t.Errorf("expected json.Number for big_id, got %T (%v)", val, val)
 	}
 }
 
@@ -910,7 +953,7 @@ func TestRouter_NotFound(t *testing.T) {
 		Headers:    map[string]string{"x-api-key": "key"},
 	}
 
-	resp, err := adapter.Router(req)
+	resp, err := adapter.Router(context.Background(), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

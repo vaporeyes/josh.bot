@@ -5,7 +5,7 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/jduncan/josh-bot/internal/domain"
@@ -33,7 +33,7 @@ func (s *DiaryServiceImpl) CreateAndPublish(ctx context.Context, entry domain.Di
 	entry.CreatedAt = now
 	entry.UpdatedAt = now
 
-	if err := s.botService.CreateDiaryEntry(entry); err != nil {
+	if err := s.botService.CreateDiaryEntry(ctx, entry); err != nil {
 		return domain.DiaryEntry{}, fmt.Errorf("store diary entry: %w", err)
 	}
 
@@ -43,7 +43,7 @@ func (s *DiaryServiceImpl) CreateAndPublish(ctx context.Context, entry domain.Di
 	commitMsg := fmt.Sprintf("diary: %s", entry.CreatedAt)
 
 	if err := s.publisher.Publish(ctx, filePath, mdContent, commitMsg); err != nil {
-		log.Printf("WARNING: failed to publish diary entry %s to GitHub: %v", entry.ID, err)
+		slog.WarnContext(ctx, "failed to publish diary entry to GitHub", "entry_id", entry.ID, "error", err)
 	}
 
 	return entry, nil

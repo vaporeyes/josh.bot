@@ -3,6 +3,7 @@
 package domain
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -30,9 +31,9 @@ func WebhookEventID() string {
 
 // WebhookService defines operations for webhook event storage and retrieval.
 type WebhookService interface {
-	CreateWebhookEvent(event WebhookEvent) error
-	GetWebhookEvents(eventType, source string) ([]WebhookEvent, error)
-	GetWebhookEvent(id string) (WebhookEvent, error)
+	CreateWebhookEvent(ctx context.Context, event WebhookEvent) error
+	GetWebhookEvents(ctx context.Context, eventType, source string) ([]WebhookEvent, error)
+	GetWebhookEvent(ctx context.Context, id string) (WebhookEvent, error)
 }
 
 // ComputeWebhookSignature computes an HMAC-SHA256 hex digest of the body using the secret.

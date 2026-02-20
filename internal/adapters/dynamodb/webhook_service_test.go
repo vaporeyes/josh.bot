@@ -3,6 +3,7 @@
 package dynamodb
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -18,7 +19,7 @@ func TestWebhookService_CreateWebhookEvent(t *testing.T) {
 	svc := NewWebhookService(mock, "test-table")
 
 	event := webhookEventFixture()
-	err := svc.CreateWebhookEvent(event)
+	err := svc.CreateWebhookEvent(context.Background(), event)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -54,7 +55,7 @@ func TestWebhookService_GetWebhookEvents_NoFilters(t *testing.T) {
 	}
 	svc := NewWebhookService(mock, "test-table")
 
-	events, err := svc.GetWebhookEvents("", "")
+	events, err := svc.GetWebhookEvents(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestWebhookService_GetWebhookEvents_FilterByType(t *testing.T) {
 	}
 	svc := NewWebhookService(mock, "test-table")
 
-	events, err := svc.GetWebhookEvents("alert", "")
+	events, err := svc.GetWebhookEvents(context.Background(), "alert", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -106,7 +107,7 @@ func TestWebhookService_GetWebhookEvents_FilterBySource(t *testing.T) {
 	}
 	svc := NewWebhookService(mock, "test-table")
 
-	events, err := svc.GetWebhookEvents("", "k8-one")
+	events, err := svc.GetWebhookEvents(context.Background(), "", "k8-one")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -128,7 +129,7 @@ func TestWebhookService_GetWebhookEvent_Success(t *testing.T) {
 	}
 	svc := NewWebhookService(mock, "test-table")
 
-	event, err := svc.GetWebhookEvent("abc123")
+	event, err := svc.GetWebhookEvent(context.Background(), "abc123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -143,7 +144,7 @@ func TestWebhookService_GetWebhookEvent_NotFound(t *testing.T) {
 	}
 	svc := NewWebhookService(mock, "test-table")
 
-	_, err := svc.GetWebhookEvent("nonexistent")
+	_, err := svc.GetWebhookEvent(context.Background(), "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for missing event")
 	}
@@ -161,7 +162,7 @@ func TestWebhookService_GetWebhookEvent_FullID(t *testing.T) {
 	svc := NewWebhookService(mock, "test-table")
 
 	// Pass full ID with prefix
-	event, err := svc.GetWebhookEvent("webhook#abc123")
+	event, err := svc.GetWebhookEvent(context.Background(), "webhook#abc123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

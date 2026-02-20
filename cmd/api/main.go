@@ -3,8 +3,9 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 
 	httpadapter "github.com/jduncan/josh-bot/internal/adapters/http"
 	"github.com/jduncan/josh-bot/internal/adapters/mock"
@@ -40,8 +41,9 @@ func main() {
 	mux.HandleFunc("/v1/memory/", adapter.MemoryHandler)
 
 	// Start the server
-	log.Println("Starting server on :8080")
+	slog.Info("starting server", "addr", ":8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {
-		log.Fatalf("could not start server: %v", err)
+		slog.Error("could not start server", "error", err)
+		os.Exit(1)
 	}
 }

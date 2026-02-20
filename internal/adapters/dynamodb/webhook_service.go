@@ -27,7 +27,7 @@ func NewWebhookService(client DynamoDBClient, tableName string) *WebhookService 
 
 // CreateWebhookEvent stores a webhook event in DynamoDB.
 // AIDEV-NOTE: ID and CreatedAt are set automatically; events are immutable after creation.
-func (s *WebhookService) CreateWebhookEvent(event domain.WebhookEvent) error {
+func (s *WebhookService) CreateWebhookEvent(ctx context.Context, event domain.WebhookEvent) error {
 	event.ID = domain.WebhookEventID()
 	event.CreatedAt = time.Now().UTC().Format(time.RFC3339)
 
@@ -36,7 +36,7 @@ func (s *WebhookService) CreateWebhookEvent(event domain.WebhookEvent) error {
 		return fmt.Errorf("marshal webhook event: %w", err)
 	}
 
-	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
 		Item:      item,
 	})
@@ -48,7 +48,7 @@ func (s *WebhookService) CreateWebhookEvent(event domain.WebhookEvent) error {
 }
 
 // GetWebhookEvents fetches all webhook events, optionally filtered by type and/or source.
-func (s *WebhookService) GetWebhookEvents(eventType, source string) ([]domain.WebhookEvent, error) {
+func (s *WebhookService) GetWebhookEvents(ctx context.Context, eventType, source string) ([]domain.WebhookEvent, error) {
 	filterExpr := "begins_with(id, :prefix)"
 	exprValues := map[string]types.AttributeValue{
 		":prefix": &types.AttributeValueMemberS{Value: "webhook#"},
@@ -77,7 +77,7 @@ func (s *WebhookService) GetWebhookEvents(eventType, source string) ([]domain.We
 		input.ExpressionAttributeNames = exprNames
 	}
 
-	output, err := s.client.Scan(context.Background(), input)
+	output, err := s.client.Scan(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("dynamodb Scan: %w", err)
 	}
@@ -95,14 +95,14 @@ func (s *WebhookService) GetWebhookEvents(eventType, source string) ([]domain.We
 }
 
 // GetWebhookEvent fetches a single webhook event by ID.
-func (s *WebhookService) GetWebhookEvent(id string) (domain.WebhookEvent, error) {
+func (s *WebhookService) GetWebhookEvent(ctx context.Context, id string) (domain.WebhookEvent, error) {
 	// Support both full ID ("webhook#abc") and short ID ("abc")
 	fullID := id
 	if !strings.HasPrefix(id, "webhook#") {
 		fullID = "webhook#" + id
 	}
 
-	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: fullID},
@@ -112,7 +112,7 @@ func (s *WebhookService) GetWebhookEvent(id string) (domain.WebhookEvent, error)
 		return domain.WebhookEvent{}, fmt.Errorf("dynamodb GetItem: %w", err)
 	}
 	if output.Item == nil {
-		return domain.WebhookEvent{}, fmt.Errorf("webhook event %q not found", id)
+		return domain.WebhookEvent{}, &domain.NotFoundError{Resource: "webhook event", ID: id}
 	}
 
 	var event domain.WebhookEvent

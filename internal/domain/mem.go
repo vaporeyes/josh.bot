@@ -3,6 +3,7 @@
 package domain
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 )
@@ -86,16 +87,16 @@ func MemoryID() string {
 
 // MemService provides access to claude-mem data and memories stored in DynamoDB.
 type MemService interface {
-	GetObservations(obsType, project string) ([]MemObservation, error)
-	GetObservation(id string) (MemObservation, error)
-	GetSummaries(project string) ([]MemSummary, error)
-	GetSummary(id string) (MemSummary, error)
-	GetPrompts() ([]MemPrompt, error)
-	GetPrompt(id string) (MemPrompt, error)
-	GetStats() (MemStats, error)
-	GetMemories(category string) ([]Memory, error)
-	GetMemory(id string) (Memory, error)
-	CreateMemory(memory Memory) error
-	UpdateMemory(id string, fields map[string]any) error
-	DeleteMemory(id string) error
+	GetObservations(ctx context.Context, obsType, project string) ([]MemObservation, error)
+	GetObservation(ctx context.Context, id string) (MemObservation, error)
+	GetSummaries(ctx context.Context, project string) ([]MemSummary, error)
+	GetSummary(ctx context.Context, id string) (MemSummary, error)
+	GetPrompts(ctx context.Context) ([]MemPrompt, error)
+	GetPrompt(ctx context.Context, id string) (MemPrompt, error)
+	GetStats(ctx context.Context) (MemStats, error)
+	GetMemories(ctx context.Context, category string) ([]Memory, error)
+	GetMemory(ctx context.Context, id string) (Memory, error)
+	CreateMemory(ctx context.Context, memory Memory) error
+	UpdateMemory(ctx context.Context, id string, fields map[string]any) error
+	DeleteMemory(ctx context.Context, id string) error
 }

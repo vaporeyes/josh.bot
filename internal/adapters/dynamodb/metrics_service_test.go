@@ -83,7 +83,7 @@ func TestMetricsService_GetMetrics(t *testing.T) {
 	}
 
 	svc := NewMetricsService(mock, "lifts-table", "data-table", nil)
-	resp, err := svc.GetMetrics()
+	resp, err := svc.GetMetrics(context.Background())
 	if err != nil {
 		t.Fatalf("GetMetrics error: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestMetricsService_EmptyLifts(t *testing.T) {
 	}
 
 	svc := NewMetricsService(mock, "lifts-table", "data-table", nil)
-	resp, err := svc.GetMetrics()
+	resp, err := svc.GetMetrics(context.Background())
 	if err != nil {
 		t.Fatalf("GetMetrics error: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestMetricsService_ScanError(t *testing.T) {
 	}
 
 	svc := NewMetricsService(mock, "lifts-table", "data-table", nil)
-	_, err := svc.GetMetrics()
+	_, err := svc.GetMetrics(context.Background())
 	if err == nil {
 		t.Fatal("expected error from scan failure, got nil")
 	}
@@ -175,7 +175,7 @@ func TestMetricsService_FocusMissing(t *testing.T) {
 	}
 
 	svc := NewMetricsService(mock, "lifts-table", "data-table", nil)
-	resp, err := svc.GetMetrics()
+	resp, err := svc.GetMetrics(context.Background())
 	if err != nil {
 		t.Fatalf("GetMetrics error: %v", err)
 	}

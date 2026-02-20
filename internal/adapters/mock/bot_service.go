@@ -3,7 +3,7 @@
 package mock
 
 import (
-	"fmt"
+	"context"
 	"time"
 
 	"github.com/jduncan/josh-bot/internal/domain"
@@ -18,7 +18,7 @@ func NewBotService() *BotService {
 }
 
 // GetStatus returns a hardcoded status for testing.
-func (s *BotService) GetStatus() (domain.Status, error) {
+func (s *BotService) GetStatus(_ context.Context) (domain.Status, error) {
 	return domain.Status{
 		Name:            "Josh Duncan",
 		Title:           "Platform Engineer",
@@ -36,12 +36,12 @@ func (s *BotService) GetStatus() (domain.Status, error) {
 }
 
 // UpdateStatus is a no-op in the mock adapter.
-func (s *BotService) UpdateStatus(fields map[string]any) error {
+func (s *BotService) UpdateStatus(_ context.Context, fields map[string]any) error {
 	return nil
 }
 
 // GetProjects returns a hardcoded list of projects.
-func (s *BotService) GetProjects() ([]domain.Project, error) {
+func (s *BotService) GetProjects(_ context.Context) ([]domain.Project, error) {
 	return []domain.Project{
 		{Slug: "modular-aws-backend", Name: "Modular AWS Backend", Stack: "Go, AWS", Description: "Read-only S3/DynamoDB access.", URL: "https://github.com/vaporeyes/josh-bot", Status: "active"},
 		{Slug: "modernist-cookbot", Name: "Modernist Cookbot", Stack: "Python, Anthropic", Description: "AI sous-chef for sous-vide.", URL: "https://github.com/vaporeyes/cookbot", Status: "active"},
@@ -49,33 +49,33 @@ func (s *BotService) GetProjects() ([]domain.Project, error) {
 }
 
 // GetProject returns a hardcoded project by slug.
-func (s *BotService) GetProject(slug string) (domain.Project, error) {
-	projects, _ := s.GetProjects()
+func (s *BotService) GetProject(ctx context.Context, slug string) (domain.Project, error) {
+	projects, _ := s.GetProjects(ctx)
 	for _, p := range projects {
 		if p.Slug == slug {
 			return p, nil
 		}
 	}
-	return domain.Project{}, fmt.Errorf("project %q not found", slug)
+	return domain.Project{}, &domain.NotFoundError{Resource: "project", ID: slug}
 }
 
 // CreateProject is a no-op in the mock adapter.
-func (s *BotService) CreateProject(project domain.Project) error {
+func (s *BotService) CreateProject(_ context.Context, project domain.Project) error {
 	return nil
 }
 
 // UpdateProject is a no-op in the mock adapter.
-func (s *BotService) UpdateProject(slug string, fields map[string]any) error {
+func (s *BotService) UpdateProject(_ context.Context, slug string, fields map[string]any) error {
 	return nil
 }
 
 // DeleteProject is a no-op in the mock adapter.
-func (s *BotService) DeleteProject(slug string) error {
+func (s *BotService) DeleteProject(_ context.Context, slug string) error {
 	return nil
 }
 
 // GetLinks returns hardcoded links, optionally filtered by tag.
-func (s *BotService) GetLinks(tag string) ([]domain.Link, error) {
+func (s *BotService) GetLinks(_ context.Context, tag string) ([]domain.Link, error) {
 	links := []domain.Link{
 		{ID: "a1b2c3d4e5f6", URL: "https://go.dev/blog/", Title: "The Go Blog", Tags: []string{"go", "programming"}},
 		{ID: "b2c3d4e5f6a1", URL: "https://aws.amazon.com/dynamodb/", Title: "Amazon DynamoDB", Tags: []string{"aws", "dynamodb", "databases"}},
@@ -96,33 +96,33 @@ func (s *BotService) GetLinks(tag string) ([]domain.Link, error) {
 }
 
 // GetLink returns a hardcoded link by ID.
-func (s *BotService) GetLink(id string) (domain.Link, error) {
-	links, _ := s.GetLinks("")
+func (s *BotService) GetLink(ctx context.Context, id string) (domain.Link, error) {
+	links, _ := s.GetLinks(ctx, "")
 	for _, l := range links {
 		if l.ID == id {
 			return l, nil
 		}
 	}
-	return domain.Link{}, fmt.Errorf("link %q not found", id)
+	return domain.Link{}, &domain.NotFoundError{Resource: "link", ID: id}
 }
 
 // CreateLink is a no-op in the mock adapter.
-func (s *BotService) CreateLink(link domain.Link) error {
+func (s *BotService) CreateLink(_ context.Context, link domain.Link) error {
 	return nil
 }
 
 // UpdateLink is a no-op in the mock adapter.
-func (s *BotService) UpdateLink(id string, fields map[string]any) error {
+func (s *BotService) UpdateLink(_ context.Context, id string, fields map[string]any) error {
 	return nil
 }
 
 // DeleteLink is a no-op in the mock adapter.
-func (s *BotService) DeleteLink(id string) error {
+func (s *BotService) DeleteLink(_ context.Context, id string) error {
 	return nil
 }
 
 // GetNotes returns hardcoded notes, optionally filtered by tag.
-func (s *BotService) GetNotes(tag string) ([]domain.Note, error) {
+func (s *BotService) GetNotes(_ context.Context, tag string) ([]domain.Note, error) {
 	notes := []domain.Note{
 		{ID: "note#abc123", Title: "Meeting notes", Body: "Discussed API design", Tags: []string{"work"}},
 		{ID: "note#def456", Title: "Grocery list", Body: "Eggs, milk, bread", Tags: []string{"personal"}},
@@ -143,33 +143,33 @@ func (s *BotService) GetNotes(tag string) ([]domain.Note, error) {
 }
 
 // GetNote returns a hardcoded note by ID.
-func (s *BotService) GetNote(id string) (domain.Note, error) {
-	notes, _ := s.GetNotes("")
+func (s *BotService) GetNote(ctx context.Context, id string) (domain.Note, error) {
+	notes, _ := s.GetNotes(ctx, "")
 	for _, n := range notes {
 		if n.ID == id {
 			return n, nil
 		}
 	}
-	return domain.Note{}, fmt.Errorf("note %q not found", id)
+	return domain.Note{}, &domain.NotFoundError{Resource: "note", ID: id}
 }
 
 // CreateNote is a no-op in the mock adapter.
-func (s *BotService) CreateNote(note domain.Note) error {
+func (s *BotService) CreateNote(_ context.Context, note domain.Note) error {
 	return nil
 }
 
 // UpdateNote is a no-op in the mock adapter.
-func (s *BotService) UpdateNote(id string, fields map[string]any) error {
+func (s *BotService) UpdateNote(_ context.Context, id string, fields map[string]any) error {
 	return nil
 }
 
 // DeleteNote is a no-op in the mock adapter.
-func (s *BotService) DeleteNote(id string) error {
+func (s *BotService) DeleteNote(_ context.Context, id string) error {
 	return nil
 }
 
 // GetTILs returns hardcoded TIL entries, optionally filtered by tag.
-func (s *BotService) GetTILs(tag string) ([]domain.TIL, error) {
+func (s *BotService) GetTILs(_ context.Context, tag string) ([]domain.TIL, error) {
 	tils := []domain.TIL{
 		{ID: "til#abc123", Title: "Go slices grow by 2x", Body: "When a slice exceeds capacity, Go doubles it", Tags: []string{"go"}},
 		{ID: "til#def456", Title: "DynamoDB scan is O(n)", Body: "Scans read the entire table", Tags: []string{"aws", "dynamodb"}},
@@ -190,33 +190,33 @@ func (s *BotService) GetTILs(tag string) ([]domain.TIL, error) {
 }
 
 // GetTIL returns a hardcoded TIL by ID.
-func (s *BotService) GetTIL(id string) (domain.TIL, error) {
-	tils, _ := s.GetTILs("")
+func (s *BotService) GetTIL(ctx context.Context, id string) (domain.TIL, error) {
+	tils, _ := s.GetTILs(ctx, "")
 	for _, t := range tils {
 		if t.ID == id {
 			return t, nil
 		}
 	}
-	return domain.TIL{}, fmt.Errorf("til %q not found", id)
+	return domain.TIL{}, &domain.NotFoundError{Resource: "til", ID: id}
 }
 
 // CreateTIL is a no-op in the mock adapter.
-func (s *BotService) CreateTIL(til domain.TIL) error {
+func (s *BotService) CreateTIL(_ context.Context, til domain.TIL) error {
 	return nil
 }
 
 // UpdateTIL is a no-op in the mock adapter.
-func (s *BotService) UpdateTIL(id string, fields map[string]any) error {
+func (s *BotService) UpdateTIL(_ context.Context, id string, fields map[string]any) error {
 	return nil
 }
 
 // DeleteTIL is a no-op in the mock adapter.
-func (s *BotService) DeleteTIL(id string) error {
+func (s *BotService) DeleteTIL(_ context.Context, id string) error {
 	return nil
 }
 
 // GetLogEntries returns hardcoded log entries, optionally filtered by tag.
-func (s *BotService) GetLogEntries(tag string) ([]domain.LogEntry, error) {
+func (s *BotService) GetLogEntries(_ context.Context, tag string) ([]domain.LogEntry, error) {
 	entries := []domain.LogEntry{
 		{ID: "log#abc123", Message: "deployed josh-bot v1.2", Tags: []string{"deploy"}},
 		{ID: "log#def456", Message: "updated DNS for josh.bot", Tags: []string{"infra"}},
@@ -237,33 +237,33 @@ func (s *BotService) GetLogEntries(tag string) ([]domain.LogEntry, error) {
 }
 
 // GetLogEntry returns a hardcoded log entry by ID.
-func (s *BotService) GetLogEntry(id string) (domain.LogEntry, error) {
-	entries, _ := s.GetLogEntries("")
+func (s *BotService) GetLogEntry(ctx context.Context, id string) (domain.LogEntry, error) {
+	entries, _ := s.GetLogEntries(ctx, "")
 	for _, e := range entries {
 		if e.ID == id {
 			return e, nil
 		}
 	}
-	return domain.LogEntry{}, fmt.Errorf("log entry %q not found", id)
+	return domain.LogEntry{}, &domain.NotFoundError{Resource: "log entry", ID: id}
 }
 
 // CreateLogEntry is a no-op in the mock adapter.
-func (s *BotService) CreateLogEntry(entry domain.LogEntry) error {
+func (s *BotService) CreateLogEntry(_ context.Context, entry domain.LogEntry) error {
 	return nil
 }
 
 // UpdateLogEntry is a no-op in the mock adapter.
-func (s *BotService) UpdateLogEntry(id string, fields map[string]any) error {
+func (s *BotService) UpdateLogEntry(_ context.Context, id string, fields map[string]any) error {
 	return nil
 }
 
 // DeleteLogEntry is a no-op in the mock adapter.
-func (s *BotService) DeleteLogEntry(id string) error {
+func (s *BotService) DeleteLogEntry(_ context.Context, id string) error {
 	return nil
 }
 
 // GetDiaryEntries returns hardcoded diary entries, optionally filtered by tag.
-func (s *BotService) GetDiaryEntries(tag string) ([]domain.DiaryEntry, error) {
+func (s *BotService) GetDiaryEntries(_ context.Context, tag string) ([]domain.DiaryEntry, error) {
 	entries := []domain.DiaryEntry{
 		{
 			ID: "diary#abc123", Title: "A Good Day", Context: "Monday morning",
@@ -288,29 +288,29 @@ func (s *BotService) GetDiaryEntries(tag string) ([]domain.DiaryEntry, error) {
 
 // GetDiaryEntry returns a hardcoded diary entry by ID.
 // AIDEV-NOTE: Matches by "diary#"+id to mirror DynamoDB adapter key construction.
-func (s *BotService) GetDiaryEntry(id string) (domain.DiaryEntry, error) {
+func (s *BotService) GetDiaryEntry(ctx context.Context, id string) (domain.DiaryEntry, error) {
 	fullID := "diary#" + id
-	entries, _ := s.GetDiaryEntries("")
+	entries, _ := s.GetDiaryEntries(ctx, "")
 	for _, e := range entries {
 		if e.ID == fullID {
 			return e, nil
 		}
 	}
-	return domain.DiaryEntry{}, fmt.Errorf("diary entry %q not found", id)
+	return domain.DiaryEntry{}, &domain.NotFoundError{Resource: "diary entry", ID: id}
 }
 
 // CreateDiaryEntry is a no-op in the mock adapter.
-func (s *BotService) CreateDiaryEntry(entry domain.DiaryEntry) error {
+func (s *BotService) CreateDiaryEntry(_ context.Context, entry domain.DiaryEntry) error {
 	return nil
 }
 
 // UpdateDiaryEntry is a no-op in the mock adapter.
-func (s *BotService) UpdateDiaryEntry(id string, fields map[string]any) error {
+func (s *BotService) UpdateDiaryEntry(_ context.Context, id string, fields map[string]any) error {
 	return nil
 }
 
 // DeleteDiaryEntry is a no-op in the mock adapter.
-func (s *BotService) DeleteDiaryEntry(id string) error {
+func (s *BotService) DeleteDiaryEntry(_ context.Context, id string) error {
 	return nil
 }
 
@@ -323,7 +323,7 @@ func NewMetricsService() *MetricsService {
 }
 
 // GetMetrics returns hardcoded metrics for testing.
-func (s *MetricsService) GetMetrics() (domain.MetricsResponse, error) {
+func (s *MetricsService) GetMetrics(_ context.Context) (domain.MetricsResponse, error) {
 	devStats := &domain.MemStats{
 		TotalObservations: 150,
 		TotalSummaries:    30,

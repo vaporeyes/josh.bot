@@ -3,6 +3,7 @@
 package domain
 
 import (
+	"context"
 	"math"
 	"time"
 )
@@ -33,7 +34,7 @@ type MetricsResponse struct {
 
 // MetricsService computes and returns the metrics dashboard.
 type MetricsService interface {
-	GetMetrics() (MetricsResponse, error)
+	GetMetrics(ctx context.Context) (MetricsResponse, error)
 }
 
 // Epley1RM estimates a 1-rep max using the Epley formula: weight * (1 + reps/30).

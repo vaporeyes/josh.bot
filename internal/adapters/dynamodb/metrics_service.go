@@ -33,13 +33,13 @@ func NewMetricsService(client DynamoDBClient, liftsTableName, dataTableName stri
 }
 
 // GetMetrics computes the metrics dashboard from lift data and status.
-func (s *MetricsService) GetMetrics() (domain.MetricsResponse, error) {
-	lifts, err := s.scanLifts()
+func (s *MetricsService) GetMetrics(ctx context.Context) (domain.MetricsResponse, error) {
+	lifts, err := s.scanLifts(ctx)
 	if err != nil {
 		return domain.MetricsResponse{}, fmt.Errorf("scan lifts: %w", err)
 	}
 
-	focus, err := s.getFocus()
+	focus, err := s.getFocus(ctx)
 	if err != nil {
 		return domain.MetricsResponse{}, fmt.Errorf("get focus: %w", err)
 	}
@@ -61,7 +61,7 @@ func (s *MetricsService) GetMetrics() (domain.MetricsResponse, error) {
 	}
 
 	if s.memService != nil {
-		stats, err := s.memService.GetStats()
+		stats, err := s.memService.GetStats(ctx)
 		if err == nil {
 			resp.Dev = &stats
 		}
@@ -72,7 +72,7 @@ func (s *MetricsService) GetMetrics() (domain.MetricsResponse, error) {
 
 // scanLifts retrieves all lift records from the lifts table.
 // AIDEV-NOTE: Full table scan is fine at ~5K items. Revisit if data grows significantly.
-func (s *MetricsService) scanLifts() ([]domain.Lift, error) {
+func (s *MetricsService) scanLifts(ctx context.Context) ([]domain.Lift, error) {
 	var lifts []domain.Lift
 	var lastKey map[string]types.AttributeValue
 
@@ -82,7 +82,7 @@ func (s *MetricsService) scanLifts() ([]domain.Lift, error) {
 			ExclusiveStartKey: lastKey,
 		}
 
-		output, err := s.client.Scan(context.Background(), input)
+		output, err := s.client.Scan(ctx, input)
 		if err != nil {
 			return nil, fmt.Errorf("dynamodb Scan: %w", err)
 		}
@@ -105,8 +105,8 @@ func (s *MetricsService) scanLifts() ([]domain.Lift, error) {
 }
 
 // getFocus reads the focus field from the status item in the data table.
-func (s *MetricsService) getFocus() (string, error) {
-	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+func (s *MetricsService) getFocus(ctx context.Context) (string, error) {
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.dataTableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: "status"},

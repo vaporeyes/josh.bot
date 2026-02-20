@@ -30,19 +30,19 @@ const typeIndexName = "type-index"
 
 // GetObservations returns observations, optionally filtered by type and project.
 // When obsType is provided, uses Query on type-index GSI. Otherwise uses Scan with prefix filter.
-func (s *MemService) GetObservations(obsType, project string) ([]domain.MemObservation, error) {
+func (s *MemService) GetObservations(ctx context.Context, obsType, project string) ([]domain.MemObservation, error) {
 	var items []map[string]types.AttributeValue
 
 	if obsType != "" {
 		// Query the type-index GSI for the specific observation type
-		queryItems, err := s.queryByType(obsType, project)
+		queryItems, err := s.queryByType(ctx, obsType, project)
 		if err != nil {
 			return nil, fmt.Errorf("query observations: %w", err)
 		}
 		items = queryItems
 	} else {
 		// Scan with obs# prefix filter
-		scanItems, err := s.scanByPrefix("obs#", project)
+		scanItems, err := s.scanByPrefix(ctx, "obs#", project)
 		if err != nil {
 			return nil, fmt.Errorf("scan observations: %w", err)
 		}
@@ -62,13 +62,13 @@ func (s *MemService) GetObservations(obsType, project string) ([]domain.MemObser
 }
 
 // GetObservation returns a single observation by ID.
-func (s *MemService) GetObservation(id string) (domain.MemObservation, error) {
+func (s *MemService) GetObservation(ctx context.Context, id string) (domain.MemObservation, error) {
 	key := id
 	if !strings.HasPrefix(id, "obs#") {
 		key = "obs#" + id
 	}
 
-	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: key},
@@ -78,7 +78,7 @@ func (s *MemService) GetObservation(id string) (domain.MemObservation, error) {
 		return domain.MemObservation{}, fmt.Errorf("dynamodb GetItem: %w", err)
 	}
 	if output.Item == nil {
-		return domain.MemObservation{}, fmt.Errorf("observation %q not found", id)
+		return domain.MemObservation{}, &domain.NotFoundError{Resource: "observation", ID: id}
 	}
 
 	var obs domain.MemObservation
@@ -90,8 +90,8 @@ func (s *MemService) GetObservation(id string) (domain.MemObservation, error) {
 }
 
 // GetSummaries returns summaries, optionally filtered by project.
-func (s *MemService) GetSummaries(project string) ([]domain.MemSummary, error) {
-	items, err := s.queryByType("summary", project)
+func (s *MemService) GetSummaries(ctx context.Context, project string) ([]domain.MemSummary, error) {
+	items, err := s.queryByType(ctx, "summary", project)
 	if err != nil {
 		return nil, fmt.Errorf("query summaries: %w", err)
 	}
@@ -109,13 +109,13 @@ func (s *MemService) GetSummaries(project string) ([]domain.MemSummary, error) {
 }
 
 // GetSummary returns a single summary by ID.
-func (s *MemService) GetSummary(id string) (domain.MemSummary, error) {
+func (s *MemService) GetSummary(ctx context.Context, id string) (domain.MemSummary, error) {
 	key := id
 	if !strings.HasPrefix(id, "summary#") {
 		key = "summary#" + id
 	}
 
-	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: key},
@@ -125,7 +125,7 @@ func (s *MemService) GetSummary(id string) (domain.MemSummary, error) {
 		return domain.MemSummary{}, fmt.Errorf("dynamodb GetItem: %w", err)
 	}
 	if output.Item == nil {
-		return domain.MemSummary{}, fmt.Errorf("summary %q not found", id)
+		return domain.MemSummary{}, &domain.NotFoundError{Resource: "summary", ID: id}
 	}
 
 	var summary domain.MemSummary
@@ -137,8 +137,8 @@ func (s *MemService) GetSummary(id string) (domain.MemSummary, error) {
 }
 
 // GetPrompts returns all prompts.
-func (s *MemService) GetPrompts() ([]domain.MemPrompt, error) {
-	items, err := s.queryByType("prompt", "")
+func (s *MemService) GetPrompts(ctx context.Context) ([]domain.MemPrompt, error) {
+	items, err := s.queryByType(ctx, "prompt", "")
 	if err != nil {
 		return nil, fmt.Errorf("query prompts: %w", err)
 	}
@@ -156,13 +156,13 @@ func (s *MemService) GetPrompts() ([]domain.MemPrompt, error) {
 }
 
 // GetPrompt returns a single prompt by ID.
-func (s *MemService) GetPrompt(id string) (domain.MemPrompt, error) {
+func (s *MemService) GetPrompt(ctx context.Context, id string) (domain.MemPrompt, error) {
 	key := id
 	if !strings.HasPrefix(id, "prompt#") {
 		key = "prompt#" + id
 	}
 
-	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: key},
@@ -172,7 +172,7 @@ func (s *MemService) GetPrompt(id string) (domain.MemPrompt, error) {
 		return domain.MemPrompt{}, fmt.Errorf("dynamodb GetItem: %w", err)
 	}
 	if output.Item == nil {
-		return domain.MemPrompt{}, fmt.Errorf("prompt %q not found", id)
+		return domain.MemPrompt{}, &domain.NotFoundError{Resource: "prompt", ID: id}
 	}
 
 	var prompt domain.MemPrompt
@@ -185,8 +185,8 @@ func (s *MemService) GetPrompt(id string) (domain.MemPrompt, error) {
 
 // GetStats scans the full table and aggregates counts by type and project.
 // AIDEV-NOTE: Full table scan is acceptable for mem table sizes (~hundreds to low thousands of items).
-func (s *MemService) GetStats() (domain.MemStats, error) {
-	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+func (s *MemService) GetStats(ctx context.Context) (domain.MemStats, error) {
+	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
 		TableName: &s.tableName,
 	})
 	if err != nil {
@@ -239,7 +239,7 @@ func (s *MemService) GetStats() (domain.MemStats, error) {
 }
 
 // queryByType queries the type-index GSI for items of a given type, with optional project filter.
-func (s *MemService) queryByType(typeName, project string) ([]map[string]types.AttributeValue, error) {
+func (s *MemService) queryByType(ctx context.Context, typeName, project string) ([]map[string]types.AttributeValue, error) {
 	indexName := typeIndexName
 	keyCondExpr := "#t = :type"
 	exprNames := map[string]string{
@@ -264,7 +264,7 @@ func (s *MemService) queryByType(typeName, project string) ([]map[string]types.A
 		input.ExpressionAttributeValues[":project"] = &types.AttributeValueMemberS{Value: project}
 	}
 
-	output, err := s.client.Query(context.Background(), input)
+	output, err := s.client.Query(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
@@ -273,7 +273,7 @@ func (s *MemService) queryByType(typeName, project string) ([]map[string]types.A
 }
 
 // scanByPrefix scans the table for items whose id begins with the given prefix.
-func (s *MemService) scanByPrefix(prefix, project string) ([]map[string]types.AttributeValue, error) {
+func (s *MemService) scanByPrefix(ctx context.Context, prefix, project string) ([]map[string]types.AttributeValue, error) {
 	filterExpr := "begins_with(id, :prefix)"
 	exprValues := map[string]types.AttributeValue{
 		":prefix": &types.AttributeValueMemberS{Value: prefix},
@@ -284,7 +284,7 @@ func (s *MemService) scanByPrefix(prefix, project string) ([]map[string]types.At
 		exprValues[":project"] = &types.AttributeValueMemberS{Value: project}
 	}
 
-	output, err := s.client.Scan(context.Background(), &dynamodb.ScanInput{
+	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
 		TableName:                 &s.tableName,
 		FilterExpression:          &filterExpr,
 		ExpressionAttributeValues: exprValues,
@@ -302,8 +302,8 @@ var allowedMemoryFields = map[string]bool{
 }
 
 // GetMemories returns memories, optionally filtered by category.
-func (s *MemService) GetMemories(category string) ([]domain.Memory, error) {
-	items, err := s.queryByType("memory", "")
+func (s *MemService) GetMemories(ctx context.Context, category string) ([]domain.Memory, error) {
+	items, err := s.queryByType(ctx, "memory", "")
 	if err != nil {
 		return nil, fmt.Errorf("query memories: %w", err)
 	}
@@ -324,13 +324,13 @@ func (s *MemService) GetMemories(category string) ([]domain.Memory, error) {
 }
 
 // GetMemory returns a single memory by ID.
-func (s *MemService) GetMemory(id string) (domain.Memory, error) {
+func (s *MemService) GetMemory(ctx context.Context, id string) (domain.Memory, error) {
 	key := id
 	if !strings.HasPrefix(id, "mem#") {
 		key = "mem#" + id
 	}
 
-	output, err := s.client.GetItem(context.Background(), &dynamodb.GetItemInput{
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: key},
@@ -340,7 +340,7 @@ func (s *MemService) GetMemory(id string) (domain.Memory, error) {
 		return domain.Memory{}, fmt.Errorf("dynamodb GetItem: %w", err)
 	}
 	if output.Item == nil {
-		return domain.Memory{}, fmt.Errorf("memory %q not found", id)
+		return domain.Memory{}, &domain.NotFoundError{Resource: "memory", ID: id}
 	}
 
 	var mem domain.Memory
@@ -352,7 +352,7 @@ func (s *MemService) GetMemory(id string) (domain.Memory, error) {
 }
 
 // CreateMemory adds a new memory to DynamoDB with a generated random ID.
-func (s *MemService) CreateMemory(memory domain.Memory) error {
+func (s *MemService) CreateMemory(ctx context.Context, memory domain.Memory) error {
 	now := time.Now().UTC()
 	memory.ID = domain.MemoryID()
 	memory.Type = "memory"
@@ -364,7 +364,7 @@ func (s *MemService) CreateMemory(memory domain.Memory) error {
 		return fmt.Errorf("marshal memory: %w", err)
 	}
 
-	_, err = s.client.PutItem(context.Background(), &dynamodb.PutItemInput{
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
 		Item:      item,
 	})
@@ -376,7 +376,7 @@ func (s *MemService) CreateMemory(memory domain.Memory) error {
 }
 
 // UpdateMemory updates specific fields on a memory in DynamoDB.
-func (s *MemService) UpdateMemory(id string, fields map[string]any) error {
+func (s *MemService) UpdateMemory(ctx context.Context, id string, fields map[string]any) error {
 	if len(fields) == 0 {
 		return fmt.Errorf("no fields provided for update")
 	}
@@ -417,7 +417,7 @@ func (s *MemService) UpdateMemory(id string, fields map[string]any) error {
 		i++
 	}
 
-	_, err := s.client.UpdateItem(context.Background(), &dynamodb.UpdateItemInput{
+	_, err := s.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: key},
@@ -434,13 +434,13 @@ func (s *MemService) UpdateMemory(id string, fields map[string]any) error {
 }
 
 // DeleteMemory removes a memory from DynamoDB.
-func (s *MemService) DeleteMemory(id string) error {
+func (s *MemService) DeleteMemory(ctx context.Context, id string) error {
 	key := id
 	if !strings.HasPrefix(id, "mem#") {
 		key = "mem#" + id
 	}
 
-	_, err := s.client.DeleteItem(context.Background(), &dynamodb.DeleteItemInput{
+	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &s.tableName,
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: key},

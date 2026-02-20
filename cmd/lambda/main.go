@@ -4,7 +4,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/aws/aws-lambda-go/lambda"
@@ -17,19 +17,24 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	tableName := os.Getenv("TABLE_NAME")
 	if tableName == "" {
-		log.Fatal("TABLE_NAME environment variable is required")
+		slog.Error("TABLE_NAME environment variable is required")
+		os.Exit(1)
 	}
 
 	liftsTableName := os.Getenv("LIFTS_TABLE_NAME")
 	if liftsTableName == "" {
-		log.Fatal("LIFTS_TABLE_NAME environment variable is required")
+		slog.Error("LIFTS_TABLE_NAME environment variable is required")
+		os.Exit(1)
 	}
 
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
-		log.Fatalf("unable to load AWS config: %v", err)
+		slog.Error("unable to load AWS config", "error", err)
+		os.Exit(1)
 	}
 
 	memTableName := os.Getenv("MEM_TABLE_NAME")

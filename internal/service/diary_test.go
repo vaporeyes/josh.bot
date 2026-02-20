@@ -18,7 +18,7 @@ type stubBotService struct {
 	createErr    error
 }
 
-func (s *stubBotService) CreateDiaryEntry(entry domain.DiaryEntry) error {
+func (s *stubBotService) CreateDiaryEntry(_ context.Context, entry domain.DiaryEntry) error {
 	s.createdEntry = entry
 	return s.createErr
 }
