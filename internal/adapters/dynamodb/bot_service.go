@@ -721,8 +721,19 @@ func (s *BotService) GetDiaryEntry(id string) (domain.DiaryEntry, error) {
 }
 
 // CreateDiaryEntry adds a new diary entry to DynamoDB.
-// AIDEV-NOTE: ID and timestamps are expected to be set by the caller (DiaryService).
+// AIDEV-NOTE: ID and timestamps are set here if not already provided by the caller.
 func (s *BotService) CreateDiaryEntry(entry domain.DiaryEntry) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	if entry.ID == "" {
+		entry.ID = domain.DiaryEntryID()
+	}
+	if entry.CreatedAt == "" {
+		entry.CreatedAt = now
+	}
+	if entry.UpdatedAt == "" {
+		entry.UpdatedAt = now
+	}
+
 	item, err := attributevalue.MarshalMap(entry)
 	if err != nil {
 		return fmt.Errorf("marshal diary entry: %w", err)

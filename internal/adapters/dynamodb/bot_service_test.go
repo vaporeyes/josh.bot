@@ -1169,3 +1169,77 @@ func TestDeleteLogEntry_DynamoDBError(t *testing.T) {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
 }
+
+func TestCreateDiaryEntry_SetsCreatedAtWhenEmpty(t *testing.T) {
+	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
+	svc := NewBotService(mock, "josh-bot-data")
+
+	err := svc.CreateDiaryEntry(domain.DiaryEntry{Body: "test entry"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.putInput == nil {
+		t.Fatal("expected PutItem to be called")
+	}
+
+	idAttr, ok := mock.putInput.Item["id"]
+	if !ok {
+		t.Fatal("expected 'id' in put item")
+	}
+	idVal := idAttr.(*types.AttributeValueMemberS).Value
+	if !strings.HasPrefix(idVal, "diary#") {
+		t.Errorf("expected id to start with 'diary#', got '%s'", idVal)
+	}
+
+	createdAtAttr, ok := mock.putInput.Item["created_at"]
+	if !ok {
+		t.Fatal("expected 'created_at' in put item")
+	}
+	createdAtVal := createdAtAttr.(*types.AttributeValueMemberS).Value
+	if createdAtVal == "" {
+		t.Error("expected created_at to be non-empty")
+	}
+
+	updatedAtAttr, ok := mock.putInput.Item["updated_at"]
+	if !ok {
+		t.Fatal("expected 'updated_at' in put item")
+	}
+	updatedAtVal := updatedAtAttr.(*types.AttributeValueMemberS).Value
+	if updatedAtVal == "" {
+		t.Error("expected updated_at to be non-empty")
+	}
+}
+
+func TestCreateDiaryEntry_PreservesCallerValues(t *testing.T) {
+	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
+	svc := NewBotService(mock, "josh-bot-data")
+
+	err := svc.CreateDiaryEntry(domain.DiaryEntry{
+		ID:        "diary#caller-set-id",
+		Body:      "test entry",
+		CreatedAt: "2026-01-01T00:00:00Z",
+		UpdatedAt: "2026-01-01T00:00:00Z",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	idVal := mock.putInput.Item["id"].(*types.AttributeValueMemberS).Value
+	if idVal != "diary#caller-set-id" {
+		t.Errorf("expected caller-set ID to be preserved, got '%s'", idVal)
+	}
+
+	createdAtVal := mock.putInput.Item["created_at"].(*types.AttributeValueMemberS).Value
+	if createdAtVal != "2026-01-01T00:00:00Z" {
+		t.Errorf("expected caller-set created_at to be preserved, got '%s'", createdAtVal)
+	}
+}
+
+func TestCreateDiaryEntry_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.CreateDiaryEntry(domain.DiaryEntry{Body: "test"})
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
