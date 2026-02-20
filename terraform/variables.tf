@@ -24,3 +24,10 @@ variable "diary_repo_name" {
   type        = string
   default     = "obsidian-diary"
 }
+
+variable "webhook_secret" {
+  description = "Shared HMAC-SHA256 secret for webhook signature validation."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

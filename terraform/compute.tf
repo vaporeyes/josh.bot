@@ -21,6 +21,7 @@ resource "aws_lambda_function" "josh_bot_api" {
       GITHUB_TOKEN     = var.github_token
       DIARY_REPO_OWNER = var.diary_repo_owner
       DIARY_REPO_NAME  = var.diary_repo_name
+      WEBHOOK_SECRET   = var.webhook_secret
     }
   }
 }
