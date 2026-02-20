@@ -90,4 +90,6 @@ jobs:
         run: |
           terraform -chdir=terraform apply \
             -auto-approve -input=false \
-            -var="bucket_name=${{ secrets.TERRAFORM_BUCKET }}"
+            -var="bucket_name=${{ secrets.TERRAFORM_BUCKET }}" \
+            -var="webhook_secret=${{ secrets.WEBHOOK_SECRET }}" \
+            -var="github_token=${{ secrets.K8_ONE_DIARY_PAT }}"
