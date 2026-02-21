@@ -72,7 +72,7 @@ func isWebhookPost(method, path string) bool {
 
 // Router handles API Gateway proxy requests with API key validation.
 func (a *Adapter) Router(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	slog.InfoContext(ctx, "request", "method", req.HTTPMethod, "path", req.Path)
+	slog.InfoContext(ctx, "request", "method", req.HTTPMethod, "path", req.Path, "source_ip", req.RequestContext.Identity.SourceIP)
 
 	// Handle CORS preflight
 	if req.HTTPMethod == "OPTIONS" {
@@ -155,7 +155,7 @@ func (a *Adapter) Router(ctx context.Context, req events.APIGatewayProxyRequest)
 		resp = jsonResponse(404, `{"error":"not found"}`)
 	}
 
-	slog.InfoContext(ctx, "response", "method", req.HTTPMethod, "path", req.Path, "status", resp.StatusCode)
+	slog.InfoContext(ctx, "response", "method", req.HTTPMethod, "path", req.Path, "status", resp.StatusCode, "source_ip", req.RequestContext.Identity.SourceIP)
 	return resp, nil
 }
 
