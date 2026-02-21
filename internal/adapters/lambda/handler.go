@@ -72,7 +72,15 @@ func isWebhookPost(method, path string) bool {
 
 // Router handles API Gateway proxy requests with API key validation.
 func (a *Adapter) Router(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	slog.InfoContext(ctx, "request", "method", req.HTTPMethod, "path", req.Path, "source_ip", req.RequestContext.Identity.SourceIP)
+	// AIDEV-NOTE: client IP from CF-Connecting-IP (Cloudflare) with X-Forwarded-For fallback
+	clientIP := req.Headers["cf-connecting-ip"]
+	if clientIP == "" {
+		clientIP = req.Headers["x-forwarded-for"]
+	}
+	if clientIP == "" {
+		clientIP = req.RequestContext.Identity.SourceIP
+	}
+	slog.InfoContext(ctx, "request", "method", req.HTTPMethod, "path", req.Path, "client_ip", clientIP)
 
 	// Handle CORS preflight
 	if req.HTTPMethod == "OPTIONS" {
@@ -155,7 +163,7 @@ func (a *Adapter) Router(ctx context.Context, req events.APIGatewayProxyRequest)
 		resp = jsonResponse(404, `{"error":"not found"}`)
 	}
 
-	slog.InfoContext(ctx, "response", "method", req.HTTPMethod, "path", req.Path, "status", resp.StatusCode, "source_ip", req.RequestContext.Identity.SourceIP)
+	slog.InfoContext(ctx, "response", "method", req.HTTPMethod, "path", req.Path, "status", resp.StatusCode, "client_ip", clientIP)
 	return resp, nil
 }
 
