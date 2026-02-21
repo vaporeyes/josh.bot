@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/jduncan/josh-bot/internal/domain"
@@ -95,6 +96,23 @@ func (a *Adapter) Router(ctx context.Context, req events.APIGatewayProxyRequest)
 		}
 	}
 
+	// AIDEV-NOTE: Idempotency check on POST requests with X-Idempotency-Key header.
+	// Returns cached response for duplicate keys within TTL (24h).
+	idempotencyKey := req.Headers["x-idempotency-key"]
+	if req.HTTPMethod == "POST" && idempotencyKey != "" {
+		fullKey := domain.IdempotencyKey(req.Path, idempotencyKey)
+		record, err := a.service.GetIdempotencyRecord(ctx, fullKey)
+		if err != nil {
+			slog.WarnContext(ctx, "idempotency lookup failed", "key", fullKey, "error", err)
+		}
+		if record != nil {
+			slog.InfoContext(ctx, "idempotency hit", "key", fullKey)
+			resp := jsonResponse(record.StatusCode, record.Body)
+			slog.InfoContext(ctx, "response", "method", req.HTTPMethod, "path", req.Path, "status", resp.StatusCode, "client_ip", clientIP)
+			return resp, nil
+		}
+	}
+
 	var resp events.APIGatewayProxyResponse
 
 	switch {
@@ -161,6 +179,21 @@ func (a *Adapter) Router(ctx context.Context, req events.APIGatewayProxyRequest)
 		resp, _ = a.handleWebhookEvent(ctx, req, id)
 	default:
 		resp = jsonResponse(404, `{"error":"not found"}`)
+	}
+
+	// Store idempotency record for successful POST responses
+	if req.HTTPMethod == "POST" && idempotencyKey != "" && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		fullKey := domain.IdempotencyKey(req.Path, idempotencyKey)
+		record := domain.IdempotencyRecord{
+			ID:         fullKey,
+			StatusCode: resp.StatusCode,
+			Body:       resp.Body,
+			ExpiresAt:  time.Now().Add(24 * time.Hour).Unix(),
+			CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+		}
+		if err := a.service.SetIdempotencyRecord(ctx, record); err != nil {
+			slog.WarnContext(ctx, "failed to store idempotency record", "key", fullKey, "error", err)
+		}
 	}
 
 	slog.InfoContext(ctx, "response", "method", req.HTTPMethod, "path", req.Path, "status", resp.StatusCode, "client_ip", clientIP)

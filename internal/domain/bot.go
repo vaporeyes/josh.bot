@@ -168,6 +168,21 @@ func DiaryEntryID() string {
 	return "diary#" + hex.EncodeToString(b)
 }
 
+// IdempotencyRecord stores the result of a POST request for deduplication.
+// AIDEV-NOTE: Stored as idem#<path>#<key> in josh-bot-data with DynamoDB TTL on expires_at.
+type IdempotencyRecord struct {
+	ID         string `json:"id" dynamodbav:"id"`
+	StatusCode int    `json:"status_code" dynamodbav:"status_code"`
+	Body       string `json:"body" dynamodbav:"body"`
+	ExpiresAt  int64  `json:"expires_at" dynamodbav:"expires_at"`
+	CreatedAt  string `json:"created_at" dynamodbav:"created_at"`
+}
+
+// IdempotencyKey builds a deterministic DynamoDB key from the request path and client-provided key.
+func IdempotencyKey(path, key string) string {
+	return fmt.Sprintf("idem#%s#%s", path, key)
+}
+
 // --- Validation ---
 
 // Validate checks required fields on a Project.
@@ -261,4 +276,6 @@ type BotService interface {
 	CreateDiaryEntry(ctx context.Context, entry DiaryEntry) error
 	UpdateDiaryEntry(ctx context.Context, id string, fields map[string]any) error
 	DeleteDiaryEntry(ctx context.Context, id string) error
+	GetIdempotencyRecord(ctx context.Context, key string) (*IdempotencyRecord, error)
+	SetIdempotencyRecord(ctx context.Context, record IdempotencyRecord) error
 }

@@ -797,6 +797,47 @@ func (s *BotService) DeleteDiaryEntry(ctx context.Context, id string) error {
 	return nil
 }
 
+// --- Idempotency ---
+
+// GetIdempotencyRecord retrieves a cached response by idempotency key.
+// AIDEV-NOTE: Returns nil, nil when the key doesn't exist (not an error).
+func (s *BotService) GetIdempotencyRecord(ctx context.Context, key string) (*domain.IdempotencyRecord, error) {
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: key},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("dynamodb GetItem: %w", err)
+	}
+	if output.Item == nil {
+		return nil, nil
+	}
+
+	var record domain.IdempotencyRecord
+	if err := attributevalue.UnmarshalMap(output.Item, &record); err != nil {
+		return nil, fmt.Errorf("unmarshal idempotency record: %w", err)
+	}
+	return &record, nil
+}
+
+// SetIdempotencyRecord stores a response keyed by idempotency key with TTL.
+func (s *BotService) SetIdempotencyRecord(ctx context.Context, record domain.IdempotencyRecord) error {
+	item, err := attributevalue.MarshalMap(record)
+	if err != nil {
+		return fmt.Errorf("marshal idempotency record: %w", err)
+	}
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: &s.tableName,
+		Item:      item,
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb PutItem: %w", err)
+	}
+	return nil
+}
+
 // --- Shared Helpers ---
 
 // updateItem builds and executes a DynamoDB UpdateItem with SET expression.

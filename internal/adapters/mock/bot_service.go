@@ -314,6 +314,16 @@ func (s *BotService) DeleteDiaryEntry(_ context.Context, id string) error {
 	return nil
 }
 
+// GetIdempotencyRecord returns nil (no cached record) in the mock.
+func (s *BotService) GetIdempotencyRecord(_ context.Context, key string) (*domain.IdempotencyRecord, error) {
+	return nil, nil
+}
+
+// SetIdempotencyRecord is a no-op in the mock.
+func (s *BotService) SetIdempotencyRecord(_ context.Context, record domain.IdempotencyRecord) error {
+	return nil
+}
+
 // MetricsService is a mock implementation of domain.MetricsService.
 type MetricsService struct{}
 

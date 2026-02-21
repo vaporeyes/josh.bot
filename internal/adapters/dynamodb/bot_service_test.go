@@ -1243,3 +1243,86 @@ func TestCreateDiaryEntry_DynamoDBError(t *testing.T) {
 		t.Error("expected error from DynamoDB failure, got nil")
 	}
 }
+
+// --- Idempotency Tests ---
+
+func TestGetIdempotencyRecord_Found(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"id":          &types.AttributeValueMemberS{Value: "idem#/v1/notes#abc123"},
+				"status_code": &types.AttributeValueMemberN{Value: "201"},
+				"body":        &types.AttributeValueMemberS{Value: `{"ok":true}`},
+				"expires_at":  &types.AttributeValueMemberN{Value: "1740000000"},
+				"created_at":  &types.AttributeValueMemberS{Value: "2026-02-20T10:00:00Z"},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	record, err := svc.GetIdempotencyRecord(context.Background(), "idem#/v1/notes#abc123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if record == nil {
+		t.Fatal("expected record, got nil")
+	}
+	if record.StatusCode != 201 {
+		t.Errorf("expected status_code 201, got %d", record.StatusCode)
+	}
+	if record.Body != `{"ok":true}` {
+		t.Errorf("expected body '{\"ok\":true}', got '%s'", record.Body)
+	}
+}
+
+func TestGetIdempotencyRecord_NotFound(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{Item: nil},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	record, err := svc.GetIdempotencyRecord(context.Background(), "idem#/v1/notes#nonexistent")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if record != nil {
+		t.Errorf("expected nil record for missing key, got %+v", record)
+	}
+}
+
+func TestSetIdempotencyRecord_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{putOutput: &dynamodb.PutItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.SetIdempotencyRecord(context.Background(), domain.IdempotencyRecord{
+		ID:         "idem#/v1/notes#abc123",
+		StatusCode: 201,
+		Body:       `{"ok":true}`,
+		ExpiresAt:  1740000000,
+		CreatedAt:  "2026-02-20T10:00:00Z",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.putInput == nil {
+		t.Fatal("expected PutItem to be called")
+	}
+	idAttr := mock.putInput.Item["id"].(*types.AttributeValueMemberS).Value
+	if idAttr != "idem#/v1/notes#abc123" {
+		t.Errorf("expected id 'idem#/v1/notes#abc123', got '%s'", idAttr)
+	}
+}
+
+func TestSetIdempotencyRecord_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.SetIdempotencyRecord(context.Background(), domain.IdempotencyRecord{
+		ID:         "idem#/v1/notes#abc123",
+		StatusCode: 201,
+		Body:       `{"ok":true}`,
+		ExpiresAt:  1740000000,
+	})
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}

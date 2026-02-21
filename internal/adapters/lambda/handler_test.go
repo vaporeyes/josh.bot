@@ -943,6 +943,121 @@ func TestRouter_PostWebhook_LargeNumberPrecision(t *testing.T) {
 	}
 }
 
+// --- Idempotency Tests ---
+
+// idempotentBotService embeds mock.BotService and overrides idempotency methods.
+type idempotentBotService struct {
+	mock.BotService
+	records map[string]*domain.IdempotencyRecord
+	stored  []domain.IdempotencyRecord
+}
+
+func (s *idempotentBotService) GetIdempotencyRecord(_ context.Context, key string) (*domain.IdempotencyRecord, error) {
+	if r, ok := s.records[key]; ok {
+		return r, nil
+	}
+	return nil, nil
+}
+
+func (s *idempotentBotService) SetIdempotencyRecord(_ context.Context, record domain.IdempotencyRecord) error {
+	s.stored = append(s.stored, record)
+	return nil
+}
+
+func TestRouter_PostWithIdempotencyKey_FirstRequest(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	svc := &idempotentBotService{records: map[string]*domain.IdempotencyRecord{}}
+	adapter := NewAdapter(svc, mock.NewMetricsService(), mock.NewMemService())
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/notes",
+		Headers:    map[string]string{"x-api-key": "key", "x-idempotency-key": "unique-123"},
+		Body:       `{"title":"Test Note","body":"Hello","tags":["test"]}`,
+	}
+
+	resp, err := adapter.Router(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 201 {
+		t.Errorf("expected 201, got %d: %s", resp.StatusCode, resp.Body)
+	}
+	// Verify idempotency record was stored
+	if len(svc.stored) != 1 {
+		t.Fatalf("expected 1 idempotency record stored, got %d", len(svc.stored))
+	}
+	if svc.stored[0].StatusCode != 201 {
+		t.Errorf("expected stored status_code 201, got %d", svc.stored[0].StatusCode)
+	}
+}
+
+func TestRouter_PostWithIdempotencyKey_DuplicateRequest(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	svc := &idempotentBotService{
+		records: map[string]*domain.IdempotencyRecord{
+			domain.IdempotencyKey("/v1/notes", "already-used"): {
+				ID:         domain.IdempotencyKey("/v1/notes", "already-used"),
+				StatusCode: 201,
+				Body:       `{"ok":true}`,
+				ExpiresAt:  9999999999,
+			},
+		},
+	}
+	adapter := NewAdapter(svc, mock.NewMetricsService(), mock.NewMemService())
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/notes",
+		Headers:    map[string]string{"x-api-key": "key", "x-idempotency-key": "already-used"},
+		Body:       `{"title":"Test Note","body":"Hello","tags":["test"]}`,
+	}
+
+	resp, err := adapter.Router(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Duplicate request returns cached response with original status code
+	if resp.StatusCode != 201 {
+		t.Errorf("expected 201 for duplicate idempotency key (original status), got %d: %s", resp.StatusCode, resp.Body)
+	}
+	if resp.Body != `{"ok":true}` {
+		t.Errorf("expected cached body, got '%s'", resp.Body)
+	}
+	// No new idempotency record should be stored
+	if len(svc.stored) != 0 {
+		t.Errorf("expected no new idempotency records, got %d", len(svc.stored))
+	}
+}
+
+func TestRouter_PostWithoutIdempotencyKey_NoRecord(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+
+	svc := &idempotentBotService{records: map[string]*domain.IdempotencyRecord{}}
+	adapter := NewAdapter(svc, mock.NewMetricsService(), mock.NewMemService())
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/notes",
+		Headers:    map[string]string{"x-api-key": "key"},
+		Body:       `{"title":"Test Note","body":"Hello","tags":["test"]}`,
+	}
+
+	resp, err := adapter.Router(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 201 {
+		t.Errorf("expected 201, got %d: %s", resp.StatusCode, resp.Body)
+	}
+	// No idempotency record should be stored when no header present
+	if len(svc.stored) != 0 {
+		t.Errorf("expected no idempotency records without header, got %d", len(svc.stored))
+	}
+}
+
 func TestRouter_NotFound(t *testing.T) {
 	t.Setenv("API_KEY", "key")
 

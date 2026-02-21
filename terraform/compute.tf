@@ -78,6 +78,12 @@ resource "aws_dynamodb_table" "josh_bot_data" {
     name = "id"
     type = "S"
   }
+
+  # AIDEV-NOTE: TTL enables automatic cleanup of idempotency records (idem# prefix, 24h expiry).
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
 }
 
 # 7. DynamoDB table for lift/workout data (separate from main data table)
