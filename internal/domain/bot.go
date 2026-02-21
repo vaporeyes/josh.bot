@@ -36,6 +36,7 @@ type Project struct {
 	Status      string `json:"status" dynamodbav:"status"`
 	CreatedAt   string `json:"created_at,omitempty" dynamodbav:"created_at,omitempty"`
 	UpdatedAt   string `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
+	DeletedAt   string `json:"deleted_at,omitempty" dynamodbav:"deleted_at,omitempty"`
 }
 
 // Link represents a saved bookmark or link.
@@ -46,6 +47,7 @@ type Link struct {
 	Tags      []string `json:"tags" dynamodbav:"tags"`
 	CreatedAt string   `json:"created_at" dynamodbav:"created_at"`
 	UpdatedAt string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
+	DeletedAt string   `json:"deleted_at,omitempty" dynamodbav:"deleted_at,omitempty"`
 }
 
 // LinkIDFromURL generates a deterministic ID from a URL using SHA256.
@@ -63,6 +65,7 @@ type Note struct {
 	Tags      []string `json:"tags" dynamodbav:"tags"`
 	CreatedAt string   `json:"created_at" dynamodbav:"created_at"`
 	UpdatedAt string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
+	DeletedAt string   `json:"deleted_at,omitempty" dynamodbav:"deleted_at,omitempty"`
 }
 
 // NoteID generates a random ID with a "note#" prefix.
@@ -81,6 +84,7 @@ type TIL struct {
 	Tags      []string `json:"tags" dynamodbav:"tags"`
 	CreatedAt string   `json:"created_at" dynamodbav:"created_at"`
 	UpdatedAt string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
+	DeletedAt string   `json:"deleted_at,omitempty" dynamodbav:"deleted_at,omitempty"`
 }
 
 // TILID generates a random ID with a "til#" prefix.
@@ -97,6 +101,7 @@ type LogEntry struct {
 	Tags      []string `json:"tags" dynamodbav:"tags"`
 	CreatedAt string   `json:"created_at" dynamodbav:"created_at"`
 	UpdatedAt string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
+	DeletedAt string   `json:"deleted_at,omitempty" dynamodbav:"deleted_at,omitempty"`
 }
 
 // LogEntryID generates a random ID with a "log#" prefix.
@@ -159,6 +164,7 @@ type DiaryEntry struct {
 	Tags      []string `json:"tags" dynamodbav:"tags"`
 	CreatedAt string   `json:"created_at" dynamodbav:"created_at"`
 	UpdatedAt string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
+	DeletedAt string   `json:"deleted_at,omitempty" dynamodbav:"deleted_at,omitempty"`
 }
 
 // DiaryEntryID generates a random ID with a "diary#" prefix.

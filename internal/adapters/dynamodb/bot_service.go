@@ -94,16 +94,21 @@ func (s *BotService) UpdateStatus(ctx context.Context, fields map[string]any) er
 // AIDEV-NOTE: GSI name for item_type-based queries on josh-bot-data table.
 const itemTypeIndex = "item-type-index"
 
+// AIDEV-NOTE: Filter clause to exclude soft-deleted items from list queries.
+const notDeletedFilter = "attribute_not_exists(deleted_at)"
+
 // --- Project Operations ---
 
 // GetProjects fetches all projects from DynamoDB using a Query on the item-type-index GSI.
 func (s *BotService) GetProjects(ctx context.Context) ([]domain.Project, error) {
 	indexName := itemTypeIndex
 	keyExpr := "item_type = :type"
+	filterExpr := notDeletedFilter
 	output, err := s.client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              &s.tableName,
 		IndexName:              &indexName,
 		KeyConditionExpression: &keyExpr,
+		FilterExpression:       &filterExpr,
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":type": &types.AttributeValueMemberS{Value: "project"},
 		},
@@ -142,6 +147,9 @@ func (s *BotService) GetProject(ctx context.Context, slug string) (domain.Projec
 	var project domain.Project
 	if err := attributevalue.UnmarshalMap(output.Item, &project); err != nil {
 		return domain.Project{}, fmt.Errorf("unmarshal project: %w", err)
+	}
+	if project.DeletedAt != "" {
+		return domain.Project{}, &domain.NotFoundError{Resource: "project", ID: slug}
 	}
 
 	return project, nil
@@ -191,18 +199,9 @@ func (s *BotService) UpdateProject(ctx context.Context, slug string, fields map[
 	return s.updateItem(ctx, "project#"+slug, fields)
 }
 
-// DeleteProject removes a project from DynamoDB.
+// DeleteProject soft-deletes a project by setting deleted_at.
 func (s *BotService) DeleteProject(ctx context.Context, slug string) error {
-	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: &s.tableName,
-		Key: map[string]types.AttributeValue{
-			"id": &types.AttributeValueMemberS{Value: "project#" + slug},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("dynamodb DeleteItem: %w", err)
-	}
-	return nil
+	return s.softDelete(ctx, "project#"+slug)
 }
 
 // allowedLinkFields defines which link fields can be updated via PUT.
@@ -220,10 +219,9 @@ func (s *BotService) GetLinks(ctx context.Context, tag string) ([]domain.Link, e
 		":type": &types.AttributeValueMemberS{Value: "link"},
 	}
 
-	var filterExpr *string
+	filter := notDeletedFilter
 	if tag != "" {
-		f := "contains(tags, :tag)"
-		filterExpr = &f
+		filter += " AND contains(tags, :tag)"
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
@@ -231,7 +229,7 @@ func (s *BotService) GetLinks(ctx context.Context, tag string) ([]domain.Link, e
 		TableName:                 &s.tableName,
 		IndexName:                 &indexName,
 		KeyConditionExpression:    &keyExpr,
-		FilterExpression:          filterExpr,
+		FilterExpression:          &filter,
 		ExpressionAttributeValues: exprValues,
 	})
 	if err != nil {
@@ -268,6 +266,9 @@ func (s *BotService) GetLink(ctx context.Context, id string) (domain.Link, error
 	var link domain.Link
 	if err := attributevalue.UnmarshalMap(output.Item, &link); err != nil {
 		return domain.Link{}, fmt.Errorf("unmarshal link: %w", err)
+	}
+	if link.DeletedAt != "" {
+		return domain.Link{}, &domain.NotFoundError{Resource: "link", ID: id}
 	}
 
 	return link, nil
@@ -316,18 +317,9 @@ func (s *BotService) UpdateLink(ctx context.Context, id string, fields map[strin
 	return s.updateItem(ctx, "link#"+id, fields)
 }
 
-// DeleteLink removes a link from DynamoDB.
+// DeleteLink soft-deletes a link by setting deleted_at.
 func (s *BotService) DeleteLink(ctx context.Context, id string) error {
-	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: &s.tableName,
-		Key: map[string]types.AttributeValue{
-			"id": &types.AttributeValueMemberS{Value: "link#" + id},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("dynamodb DeleteItem: %w", err)
-	}
-	return nil
+	return s.softDelete(ctx, "link#"+id)
 }
 
 // allowedNoteFields defines which note fields can be updated via PUT.
@@ -345,10 +337,9 @@ func (s *BotService) GetNotes(ctx context.Context, tag string) ([]domain.Note, e
 		":type": &types.AttributeValueMemberS{Value: "note"},
 	}
 
-	var filterExpr *string
+	filter := notDeletedFilter
 	if tag != "" {
-		f := "contains(tags, :tag)"
-		filterExpr = &f
+		filter += " AND contains(tags, :tag)"
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
@@ -356,7 +347,7 @@ func (s *BotService) GetNotes(ctx context.Context, tag string) ([]domain.Note, e
 		TableName:                 &s.tableName,
 		IndexName:                 &indexName,
 		KeyConditionExpression:    &keyExpr,
-		FilterExpression:          filterExpr,
+		FilterExpression:          &filter,
 		ExpressionAttributeValues: exprValues,
 	})
 	if err != nil {
@@ -393,6 +384,9 @@ func (s *BotService) GetNote(ctx context.Context, id string) (domain.Note, error
 	var note domain.Note
 	if err := attributevalue.UnmarshalMap(output.Item, &note); err != nil {
 		return domain.Note{}, fmt.Errorf("unmarshal note: %w", err)
+	}
+	if note.DeletedAt != "" {
+		return domain.Note{}, &domain.NotFoundError{Resource: "note", ID: id}
 	}
 
 	return note, nil
@@ -440,18 +434,9 @@ func (s *BotService) UpdateNote(ctx context.Context, id string, fields map[strin
 	return s.updateItem(ctx, "note#"+id, fields)
 }
 
-// DeleteNote removes a note from DynamoDB.
+// DeleteNote soft-deletes a note by setting deleted_at.
 func (s *BotService) DeleteNote(ctx context.Context, id string) error {
-	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: &s.tableName,
-		Key: map[string]types.AttributeValue{
-			"id": &types.AttributeValueMemberS{Value: "note#" + id},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("dynamodb DeleteItem: %w", err)
-	}
-	return nil
+	return s.softDelete(ctx, "note#"+id)
 }
 
 // allowedTILFields defines which TIL fields can be updated via PUT.
@@ -469,10 +454,9 @@ func (s *BotService) GetTILs(ctx context.Context, tag string) ([]domain.TIL, err
 		":type": &types.AttributeValueMemberS{Value: "til"},
 	}
 
-	var filterExpr *string
+	filter := notDeletedFilter
 	if tag != "" {
-		f := "contains(tags, :tag)"
-		filterExpr = &f
+		filter += " AND contains(tags, :tag)"
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
@@ -480,7 +464,7 @@ func (s *BotService) GetTILs(ctx context.Context, tag string) ([]domain.TIL, err
 		TableName:                 &s.tableName,
 		IndexName:                 &indexName,
 		KeyConditionExpression:    &keyExpr,
-		FilterExpression:          filterExpr,
+		FilterExpression:          &filter,
 		ExpressionAttributeValues: exprValues,
 	})
 	if err != nil {
@@ -517,6 +501,9 @@ func (s *BotService) GetTIL(ctx context.Context, id string) (domain.TIL, error) 
 	var til domain.TIL
 	if err := attributevalue.UnmarshalMap(output.Item, &til); err != nil {
 		return domain.TIL{}, fmt.Errorf("unmarshal til: %w", err)
+	}
+	if til.DeletedAt != "" {
+		return domain.TIL{}, &domain.NotFoundError{Resource: "til", ID: id}
 	}
 
 	return til, nil
@@ -564,18 +551,9 @@ func (s *BotService) UpdateTIL(ctx context.Context, id string, fields map[string
 	return s.updateItem(ctx, "til#"+id, fields)
 }
 
-// DeleteTIL removes a TIL entry from DynamoDB.
+// DeleteTIL soft-deletes a TIL entry by setting deleted_at.
 func (s *BotService) DeleteTIL(ctx context.Context, id string) error {
-	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: &s.tableName,
-		Key: map[string]types.AttributeValue{
-			"id": &types.AttributeValueMemberS{Value: "til#" + id},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("dynamodb DeleteItem: %w", err)
-	}
-	return nil
+	return s.softDelete(ctx, "til#"+id)
 }
 
 // allowedLogEntryFields defines which log entry fields can be updated via PUT.
@@ -593,10 +571,9 @@ func (s *BotService) GetLogEntries(ctx context.Context, tag string) ([]domain.Lo
 		":type": &types.AttributeValueMemberS{Value: "log"},
 	}
 
-	var filterExpr *string
+	filter := notDeletedFilter
 	if tag != "" {
-		f := "contains(tags, :tag)"
-		filterExpr = &f
+		filter += " AND contains(tags, :tag)"
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
@@ -604,7 +581,7 @@ func (s *BotService) GetLogEntries(ctx context.Context, tag string) ([]domain.Lo
 		TableName:                 &s.tableName,
 		IndexName:                 &indexName,
 		KeyConditionExpression:    &keyExpr,
-		FilterExpression:          filterExpr,
+		FilterExpression:          &filter,
 		ExpressionAttributeValues: exprValues,
 	})
 	if err != nil {
@@ -641,6 +618,9 @@ func (s *BotService) GetLogEntry(ctx context.Context, id string) (domain.LogEntr
 	var entry domain.LogEntry
 	if err := attributevalue.UnmarshalMap(output.Item, &entry); err != nil {
 		return domain.LogEntry{}, fmt.Errorf("unmarshal log entry: %w", err)
+	}
+	if entry.DeletedAt != "" {
+		return domain.LogEntry{}, &domain.NotFoundError{Resource: "log entry", ID: id}
 	}
 
 	return entry, nil
@@ -688,18 +668,9 @@ func (s *BotService) UpdateLogEntry(ctx context.Context, id string, fields map[s
 	return s.updateItem(ctx, "log#"+id, fields)
 }
 
-// DeleteLogEntry removes a log entry from DynamoDB.
+// DeleteLogEntry soft-deletes a log entry by setting deleted_at.
 func (s *BotService) DeleteLogEntry(ctx context.Context, id string) error {
-	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: &s.tableName,
-		Key: map[string]types.AttributeValue{
-			"id": &types.AttributeValueMemberS{Value: "log#" + id},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("dynamodb DeleteItem: %w", err)
-	}
-	return nil
+	return s.softDelete(ctx, "log#"+id)
 }
 
 // allowedDiaryEntryFields defines which diary entry fields can be updated via PUT.
@@ -718,10 +689,9 @@ func (s *BotService) GetDiaryEntries(ctx context.Context, tag string) ([]domain.
 		":type": &types.AttributeValueMemberS{Value: "diary"},
 	}
 
-	var filterExpr *string
+	filter := notDeletedFilter
 	if tag != "" {
-		f := "contains(tags, :tag)"
-		filterExpr = &f
+		filter += " AND contains(tags, :tag)"
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
@@ -729,7 +699,7 @@ func (s *BotService) GetDiaryEntries(ctx context.Context, tag string) ([]domain.
 		TableName:                 &s.tableName,
 		IndexName:                 &indexName,
 		KeyConditionExpression:    &keyExpr,
-		FilterExpression:          filterExpr,
+		FilterExpression:          &filter,
 		ExpressionAttributeValues: exprValues,
 	})
 	if err != nil {
@@ -766,6 +736,9 @@ func (s *BotService) GetDiaryEntry(ctx context.Context, id string) (domain.Diary
 	var entry domain.DiaryEntry
 	if err := attributevalue.UnmarshalMap(output.Item, &entry); err != nil {
 		return domain.DiaryEntry{}, fmt.Errorf("unmarshal diary entry: %w", err)
+	}
+	if entry.DeletedAt != "" {
+		return domain.DiaryEntry{}, &domain.NotFoundError{Resource: "diary entry", ID: id}
 	}
 
 	return entry, nil
@@ -820,18 +793,9 @@ func (s *BotService) UpdateDiaryEntry(ctx context.Context, id string, fields map
 	return s.updateItem(ctx, "diary#"+id, fields)
 }
 
-// DeleteDiaryEntry removes a diary entry from DynamoDB.
+// DeleteDiaryEntry soft-deletes a diary entry by setting deleted_at.
 func (s *BotService) DeleteDiaryEntry(ctx context.Context, id string) error {
-	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: &s.tableName,
-		Key: map[string]types.AttributeValue{
-			"id": &types.AttributeValueMemberS{Value: "diary#" + id},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("dynamodb DeleteItem: %w", err)
-	}
-	return nil
+	return s.softDelete(ctx, "diary#"+id)
 }
 
 // --- Idempotency ---
@@ -876,6 +840,27 @@ func (s *BotService) SetIdempotencyRecord(ctx context.Context, record domain.Ide
 }
 
 // --- Shared Helpers ---
+
+// softDelete sets deleted_at on an item instead of removing it.
+// AIDEV-NOTE: Soft-deleted items are excluded from list queries and get-by-id lookups.
+func (s *BotService) softDelete(ctx context.Context, id string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	updateExpr := "SET deleted_at = :da"
+	_, err := s.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: id},
+		},
+		UpdateExpression: &updateExpr,
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":da": &types.AttributeValueMemberS{Value: now},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb UpdateItem (soft delete): %w", err)
+	}
+	return nil
+}
 
 // updateItem builds and executes a DynamoDB UpdateItem with SET expression.
 // Automatically adds updated_at timestamp.

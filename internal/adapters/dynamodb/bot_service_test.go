@@ -4,6 +4,7 @@ package dynamodb
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -378,29 +379,91 @@ func TestUpdateProject_InvalidField(t *testing.T) {
 	}
 }
 
-func TestDeleteProject_Success(t *testing.T) {
-	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
+func TestDeleteProject_SoftDelete(t *testing.T) {
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
 	err := svc.DeleteProject(context.Background(), "modular-aws-backend")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mock.deleteInput == nil {
-		t.Fatal("expected DeleteItem to be called")
+	// AIDEV-NOTE: Soft delete uses UpdateItem to set deleted_at, not DeleteItem.
+	if mock.updateInput == nil {
+		t.Fatal("expected UpdateItem to be called for soft delete")
 	}
-	idAttr := mock.deleteInput.Key["id"]
+	if mock.deleteInput != nil {
+		t.Error("expected DeleteItem NOT to be called")
+	}
+	idAttr := mock.updateInput.Key["id"]
 	if idAttr.(*types.AttributeValueMemberS).Value != "project#modular-aws-backend" {
 		t.Errorf("expected key 'project#modular-aws-backend', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+	expr := *mock.updateInput.UpdateExpression
+	if !strings.Contains(expr, "deleted_at") {
+		t.Errorf("expected update expression to set deleted_at, got '%s'", expr)
 	}
 }
 
 func TestDeleteProject_DynamoDBError(t *testing.T) {
-	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
+	mock := &mockDynamoDBClient{updateErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
 	err := svc.DeleteProject(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+func TestGetProject_SoftDeleted(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"id":         &types.AttributeValueMemberS{Value: "project#old-project"},
+				"slug":       &types.AttributeValueMemberS{Value: "old-project"},
+				"name":       &types.AttributeValueMemberS{Value: "Old Project"},
+				"deleted_at": &types.AttributeValueMemberS{Value: "2026-02-21T00:00:00Z"},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetProject(context.Background(), "old-project")
+	if err == nil {
+		t.Fatal("expected NotFoundError for soft-deleted project, got nil")
+	}
+	var nfe *domain.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
+	}
+}
+
+func TestGetProjects_ExcludesSoftDeleted(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		queryOutput: &dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{
+				{
+					"id":        &types.AttributeValueMemberS{Value: "project#active"},
+					"slug":      &types.AttributeValueMemberS{Value: "active"},
+					"name":      &types.AttributeValueMemberS{Value: "Active Project"},
+					"item_type": &types.AttributeValueMemberS{Value: "project"},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetProjects(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Verify the query includes a filter to exclude soft-deleted items
+	if mock.queryInput == nil {
+		t.Fatal("expected Query to be called")
+	}
+	if mock.queryInput.FilterExpression == nil {
+		t.Fatal("expected FilterExpression to exclude soft-deleted items")
+	}
+	if !strings.Contains(*mock.queryInput.FilterExpression, "attribute_not_exists(deleted_at)") {
+		t.Errorf("expected filter 'attribute_not_exists(deleted_at)', got '%s'", *mock.queryInput.FilterExpression)
 	}
 }
 
@@ -613,29 +676,78 @@ func TestUpdateLink_InvalidField(t *testing.T) {
 	}
 }
 
-func TestDeleteLink_Success(t *testing.T) {
-	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
+func TestDeleteLink_SoftDelete(t *testing.T) {
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
 	err := svc.DeleteLink(context.Background(), "a1b2c3d4e5f6")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mock.deleteInput == nil {
-		t.Fatal("expected DeleteItem to be called")
+	if mock.updateInput == nil {
+		t.Fatal("expected UpdateItem to be called for soft delete")
 	}
-	idAttr := mock.deleteInput.Key["id"]
+	if mock.deleteInput != nil {
+		t.Error("expected DeleteItem NOT to be called")
+	}
+	idAttr := mock.updateInput.Key["id"]
 	if idAttr.(*types.AttributeValueMemberS).Value != "link#a1b2c3d4e5f6" {
 		t.Errorf("expected key 'link#a1b2c3d4e5f6', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+	expr := *mock.updateInput.UpdateExpression
+	if !strings.Contains(expr, "deleted_at") {
+		t.Errorf("expected update expression to set deleted_at, got '%s'", expr)
 	}
 }
 
 func TestDeleteLink_DynamoDBError(t *testing.T) {
-	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
+	mock := &mockDynamoDBClient{updateErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
 	err := svc.DeleteLink(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+func TestGetLink_SoftDeleted(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"id":         &types.AttributeValueMemberS{Value: "link#a1b2c3d4e5f6"},
+				"url":        &types.AttributeValueMemberS{Value: "https://example.com"},
+				"deleted_at": &types.AttributeValueMemberS{Value: "2026-02-21T00:00:00Z"},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetLink(context.Background(), "a1b2c3d4e5f6")
+	if err == nil {
+		t.Fatal("expected NotFoundError for soft-deleted link, got nil")
+	}
+	var nfe *domain.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
+	}
+}
+
+func TestGetLinks_ExcludesSoftDeleted(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		queryOutput: &dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetLinks(context.Background(), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.queryInput.FilterExpression == nil {
+		t.Fatal("expected FilterExpression to exclude soft-deleted items")
+	}
+	if !strings.Contains(*mock.queryInput.FilterExpression, "attribute_not_exists(deleted_at)") {
+		t.Errorf("expected filter 'attribute_not_exists(deleted_at)', got '%s'", *mock.queryInput.FilterExpression)
 	}
 }
 
@@ -823,29 +935,79 @@ func TestUpdateNote_InvalidField(t *testing.T) {
 	}
 }
 
-func TestDeleteNote_Success(t *testing.T) {
-	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
+func TestDeleteNote_SoftDelete(t *testing.T) {
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
 	err := svc.DeleteNote(context.Background(), "abc123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mock.deleteInput == nil {
-		t.Fatal("expected DeleteItem to be called")
+	if mock.updateInput == nil {
+		t.Fatal("expected UpdateItem to be called for soft delete")
 	}
-	idAttr := mock.deleteInput.Key["id"]
+	if mock.deleteInput != nil {
+		t.Error("expected DeleteItem NOT to be called")
+	}
+	idAttr := mock.updateInput.Key["id"]
 	if idAttr.(*types.AttributeValueMemberS).Value != "note#abc123" {
 		t.Errorf("expected key 'note#abc123', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+	expr := *mock.updateInput.UpdateExpression
+	if !strings.Contains(expr, "deleted_at") {
+		t.Errorf("expected update expression to set deleted_at, got '%s'", expr)
 	}
 }
 
 func TestDeleteNote_DynamoDBError(t *testing.T) {
-	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
+	mock := &mockDynamoDBClient{updateErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
 	err := svc.DeleteNote(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+func TestGetNote_SoftDeleted(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"id":         &types.AttributeValueMemberS{Value: "note#abc123"},
+				"title":      &types.AttributeValueMemberS{Value: "Old Note"},
+				"body":       &types.AttributeValueMemberS{Value: "Deleted content"},
+				"deleted_at": &types.AttributeValueMemberS{Value: "2026-02-21T00:00:00Z"},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetNote(context.Background(), "abc123")
+	if err == nil {
+		t.Fatal("expected NotFoundError for soft-deleted note, got nil")
+	}
+	var nfe *domain.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
+	}
+}
+
+func TestGetNotes_ExcludesSoftDeleted(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		queryOutput: &dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetNotes(context.Background(), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.queryInput.FilterExpression == nil {
+		t.Fatal("expected FilterExpression to exclude soft-deleted items")
+	}
+	if !strings.Contains(*mock.queryInput.FilterExpression, "attribute_not_exists(deleted_at)") {
+		t.Errorf("expected filter 'attribute_not_exists(deleted_at)', got '%s'", *mock.queryInput.FilterExpression)
 	}
 }
 
@@ -1018,29 +1180,59 @@ func TestUpdateTIL_InvalidField(t *testing.T) {
 	}
 }
 
-func TestDeleteTIL_Success(t *testing.T) {
-	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
+func TestDeleteTIL_SoftDelete(t *testing.T) {
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
 	err := svc.DeleteTIL(context.Background(), "abc123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mock.deleteInput == nil {
-		t.Fatal("expected DeleteItem to be called")
+	if mock.updateInput == nil {
+		t.Fatal("expected UpdateItem to be called for soft delete")
 	}
-	idAttr := mock.deleteInput.Key["id"]
+	if mock.deleteInput != nil {
+		t.Error("expected DeleteItem NOT to be called")
+	}
+	idAttr := mock.updateInput.Key["id"]
 	if idAttr.(*types.AttributeValueMemberS).Value != "til#abc123" {
 		t.Errorf("expected key 'til#abc123', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+	expr := *mock.updateInput.UpdateExpression
+	if !strings.Contains(expr, "deleted_at") {
+		t.Errorf("expected update expression to set deleted_at, got '%s'", expr)
 	}
 }
 
 func TestDeleteTIL_DynamoDBError(t *testing.T) {
-	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
+	mock := &mockDynamoDBClient{updateErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
 	err := svc.DeleteTIL(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+func TestGetTIL_SoftDeleted(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"id":         &types.AttributeValueMemberS{Value: "til#abc123"},
+				"title":      &types.AttributeValueMemberS{Value: "Old TIL"},
+				"body":       &types.AttributeValueMemberS{Value: "Deleted content"},
+				"deleted_at": &types.AttributeValueMemberS{Value: "2026-02-21T00:00:00Z"},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetTIL(context.Background(), "abc123")
+	if err == nil {
+		t.Fatal("expected NotFoundError for soft-deleted TIL, got nil")
+	}
+	var nfe *domain.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
 	}
 }
 
@@ -1217,29 +1409,58 @@ func TestUpdateLogEntry_InvalidField(t *testing.T) {
 	}
 }
 
-func TestDeleteLogEntry_Success(t *testing.T) {
-	mock := &mockDynamoDBClient{deleteOutput: &dynamodb.DeleteItemOutput{}}
+func TestDeleteLogEntry_SoftDelete(t *testing.T) {
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
 
 	svc := NewBotService(mock, "josh-bot-data")
 	err := svc.DeleteLogEntry(context.Background(), "abc123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mock.deleteInput == nil {
-		t.Fatal("expected DeleteItem to be called")
+	if mock.updateInput == nil {
+		t.Fatal("expected UpdateItem to be called for soft delete")
 	}
-	idAttr := mock.deleteInput.Key["id"]
+	if mock.deleteInput != nil {
+		t.Error("expected DeleteItem NOT to be called")
+	}
+	idAttr := mock.updateInput.Key["id"]
 	if idAttr.(*types.AttributeValueMemberS).Value != "log#abc123" {
 		t.Errorf("expected key 'log#abc123', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+	expr := *mock.updateInput.UpdateExpression
+	if !strings.Contains(expr, "deleted_at") {
+		t.Errorf("expected update expression to set deleted_at, got '%s'", expr)
 	}
 }
 
 func TestDeleteLogEntry_DynamoDBError(t *testing.T) {
-	mock := &mockDynamoDBClient{deleteErr: context.DeadlineExceeded}
+	mock := &mockDynamoDBClient{updateErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
 	err := svc.DeleteLogEntry(context.Background(), "test")
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+func TestGetLogEntry_SoftDeleted(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"id":         &types.AttributeValueMemberS{Value: "log#abc123"},
+				"message":    &types.AttributeValueMemberS{Value: "old log"},
+				"deleted_at": &types.AttributeValueMemberS{Value: "2026-02-21T00:00:00Z"},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetLogEntry(context.Background(), "abc123")
+	if err == nil {
+		t.Fatal("expected NotFoundError for soft-deleted log entry, got nil")
+	}
+	var nfe *domain.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
 	}
 }
 
@@ -1323,6 +1544,81 @@ func TestCreateDiaryEntry_DynamoDBError(t *testing.T) {
 	err := svc.CreateDiaryEntry(context.Background(), domain.DiaryEntry{Body: "test"})
 	if err == nil {
 		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+func TestDeleteDiaryEntry_SoftDelete(t *testing.T) {
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.DeleteDiaryEntry(context.Background(), "abc123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.updateInput == nil {
+		t.Fatal("expected UpdateItem to be called for soft delete")
+	}
+	if mock.deleteInput != nil {
+		t.Error("expected DeleteItem NOT to be called")
+	}
+	idAttr := mock.updateInput.Key["id"]
+	if idAttr.(*types.AttributeValueMemberS).Value != "diary#abc123" {
+		t.Errorf("expected key 'diary#abc123', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
+	}
+	expr := *mock.updateInput.UpdateExpression
+	if !strings.Contains(expr, "deleted_at") {
+		t.Errorf("expected update expression to set deleted_at, got '%s'", expr)
+	}
+}
+
+func TestDeleteDiaryEntry_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{updateErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.DeleteDiaryEntry(context.Background(), "test")
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
+func TestGetDiaryEntry_SoftDeleted(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		getOutput: &dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"id":         &types.AttributeValueMemberS{Value: "diary#abc123"},
+				"body":       &types.AttributeValueMemberS{Value: "old entry"},
+				"deleted_at": &types.AttributeValueMemberS{Value: "2026-02-21T00:00:00Z"},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetDiaryEntry(context.Background(), "abc123")
+	if err == nil {
+		t.Fatal("expected NotFoundError for soft-deleted diary entry, got nil")
+	}
+	var nfe *domain.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Errorf("expected NotFoundError, got %T: %v", err, err)
+	}
+}
+
+func TestGetDiaryEntries_ExcludesSoftDeleted(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		queryOutput: &dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	_, err := svc.GetDiaryEntries(context.Background(), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.queryInput.FilterExpression == nil {
+		t.Fatal("expected FilterExpression to exclude soft-deleted items")
+	}
+	if !strings.Contains(*mock.queryInput.FilterExpression, "attribute_not_exists(deleted_at)") {
+		t.Errorf("expected filter 'attribute_not_exists(deleted_at)', got '%s'", *mock.queryInput.FilterExpression)
 	}
 }
 
