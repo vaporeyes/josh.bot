@@ -24,6 +24,7 @@ func httpError(w http.ResponseWriter, err error) {
 		http.Error(w, `{"error":"`+validationErr.Error()+`"}`, http.StatusBadRequest)
 		return
 	}
+	slog.Error("internal server error", "error", err)
 	http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
 }
 

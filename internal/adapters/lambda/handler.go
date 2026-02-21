@@ -121,69 +121,70 @@ func (a *Adapter) Router(ctx context.Context, req events.APIGatewayProxyRequest)
 	}
 
 	var resp events.APIGatewayProxyResponse
+	var routeErr error
 
 	switch {
 	case req.Path == "/v1/status":
-		resp, _ = a.handleStatus(ctx, req)
+		resp, routeErr = a.handleStatus(ctx, req)
 	case req.Path == "/v1/projects":
-		resp, _ = a.handleProjects(ctx, req)
+		resp, routeErr = a.handleProjects(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/projects/"):
 		slug := strings.TrimPrefix(req.Path, "/v1/projects/")
-		resp, _ = a.handleProject(ctx, req, slug)
+		resp, routeErr = a.handleProject(ctx, req, slug)
 	case req.Path == "/v1/metrics":
-		resp, _ = a.handleMetrics(ctx, req)
+		resp, routeErr = a.handleMetrics(ctx, req)
 	case req.Path == "/v1/links":
-		resp, _ = a.handleLinks(ctx, req)
+		resp, routeErr = a.handleLinks(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/links/"):
 		id := strings.TrimPrefix(req.Path, "/v1/links/")
-		resp, _ = a.handleLink(ctx, req, id)
+		resp, routeErr = a.handleLink(ctx, req, id)
 	case req.Path == "/v1/notes":
-		resp, _ = a.handleNotes(ctx, req)
+		resp, routeErr = a.handleNotes(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/notes/"):
 		id := strings.TrimPrefix(req.Path, "/v1/notes/")
-		resp, _ = a.handleNote(ctx, req, id)
+		resp, routeErr = a.handleNote(ctx, req, id)
 	case req.Path == "/v1/til":
-		resp, _ = a.handleTILs(ctx, req)
+		resp, routeErr = a.handleTILs(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/til/"):
 		id := strings.TrimPrefix(req.Path, "/v1/til/")
-		resp, _ = a.handleTIL(ctx, req, id)
+		resp, routeErr = a.handleTIL(ctx, req, id)
 	case req.Path == "/v1/log":
-		resp, _ = a.handleLogEntries(ctx, req)
+		resp, routeErr = a.handleLogEntries(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/log/"):
 		id := strings.TrimPrefix(req.Path, "/v1/log/")
-		resp, _ = a.handleLogEntry(ctx, req, id)
+		resp, routeErr = a.handleLogEntry(ctx, req, id)
 	case req.Path == "/v1/mem/observations":
-		resp, _ = a.handleMemObservations(ctx, req)
+		resp, routeErr = a.handleMemObservations(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/mem/observations/"):
 		id := strings.TrimPrefix(req.Path, "/v1/mem/observations/")
-		resp, _ = a.handleMemObservation(ctx, req, id)
+		resp, routeErr = a.handleMemObservation(ctx, req, id)
 	case req.Path == "/v1/mem/summaries":
-		resp, _ = a.handleMemSummaries(ctx, req)
+		resp, routeErr = a.handleMemSummaries(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/mem/summaries/"):
 		id := strings.TrimPrefix(req.Path, "/v1/mem/summaries/")
-		resp, _ = a.handleMemSummary(ctx, req, id)
+		resp, routeErr = a.handleMemSummary(ctx, req, id)
 	case req.Path == "/v1/mem/prompts":
-		resp, _ = a.handleMemPrompts(ctx, req)
+		resp, routeErr = a.handleMemPrompts(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/mem/prompts/"):
 		id := strings.TrimPrefix(req.Path, "/v1/mem/prompts/")
-		resp, _ = a.handleMemPrompt(ctx, req, id)
+		resp, routeErr = a.handleMemPrompt(ctx, req, id)
 	case req.Path == "/v1/mem/stats":
-		resp, _ = a.handleMemStats(ctx, req)
+		resp, routeErr = a.handleMemStats(ctx, req)
 	case req.Path == "/v1/diary":
-		resp, _ = a.handleDiaryEntries(ctx, req)
+		resp, routeErr = a.handleDiaryEntries(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/diary/"):
 		id := strings.TrimPrefix(req.Path, "/v1/diary/")
-		resp, _ = a.handleDiaryEntry(ctx, req, id)
+		resp, routeErr = a.handleDiaryEntry(ctx, req, id)
 	case req.Path == "/v1/memory":
-		resp, _ = a.handleMemories(ctx, req)
+		resp, routeErr = a.handleMemories(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/memory/"):
 		id := strings.TrimPrefix(req.Path, "/v1/memory/")
-		resp, _ = a.handleMemory(ctx, req, id)
+		resp, routeErr = a.handleMemory(ctx, req, id)
 	case req.Path == "/v1/webhooks":
-		resp, _ = a.handleWebhooks(ctx, req)
+		resp, routeErr = a.handleWebhooks(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/webhooks/"):
 		id := strings.TrimPrefix(req.Path, "/v1/webhooks/")
-		resp, _ = a.handleWebhookEvent(ctx, req, id)
+		resp, routeErr = a.handleWebhookEvent(ctx, req, id)
 	default:
 		resp = jsonResponse(404, `{"error":"not found"}`)
 	}
@@ -203,7 +204,12 @@ func (a *Adapter) Router(ctx context.Context, req events.APIGatewayProxyRequest)
 		}
 	}
 
-	slog.InfoContext(ctx, "response", "method", req.HTTPMethod, "path", req.Path, "status", resp.StatusCode, "client_ip", clientIP)
+	// AIDEV-NOTE: Log errors at ERROR level so 5xx responses are easy to find in CloudWatch.
+	if routeErr != nil {
+		slog.ErrorContext(ctx, "response", "method", req.HTTPMethod, "path", req.Path, "status", resp.StatusCode, "client_ip", clientIP, "error", routeErr)
+	} else {
+		slog.InfoContext(ctx, "response", "method", req.HTTPMethod, "path", req.Path, "status", resp.StatusCode, "client_ip", clientIP)
+	}
 	return resp, nil
 }
 
