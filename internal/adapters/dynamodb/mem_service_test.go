@@ -364,3 +364,147 @@ func TestGetStats_Success(t *testing.T) {
 		t.Errorf("expected 3 items for josh.bot, got %d", stats.ByProject["josh.bot"])
 	}
 }
+
+// --- Pagination Tests ---
+
+func TestGetStats_Paginated(t *testing.T) {
+	// Simulate DynamoDB returning results across two pages
+	mock := &mockDynamoDBClient{
+		scanOutputs: []*dynamodb.ScanOutput{
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "obs#1"}, "type": &types.AttributeValueMemberS{Value: "decision"}, "project": &types.AttributeValueMemberS{Value: "josh.bot"}},
+					{"id": &types.AttributeValueMemberS{Value: "obs#2"}, "type": &types.AttributeValueMemberS{Value: "feature"}, "project": &types.AttributeValueMemberS{Value: "josh.bot"}},
+				},
+				LastEvaluatedKey: map[string]types.AttributeValue{
+					"id": &types.AttributeValueMemberS{Value: "obs#2"},
+				},
+			},
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "obs#3"}, "type": &types.AttributeValueMemberS{Value: "decision"}, "project": &types.AttributeValueMemberS{Value: "other"}},
+					{"id": &types.AttributeValueMemberS{Value: "summary#1"}, "type": &types.AttributeValueMemberS{Value: "summary"}, "project": &types.AttributeValueMemberS{Value: "josh.bot"}},
+					{"id": &types.AttributeValueMemberS{Value: "prompt#1"}, "type": &types.AttributeValueMemberS{Value: "prompt"}},
+				},
+			},
+		},
+	}
+
+	svc := NewMemService(mock, "josh-bot-mem")
+	stats, err := svc.GetStats(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stats.TotalObservations != 3 {
+		t.Errorf("expected 3 observations, got %d", stats.TotalObservations)
+	}
+	if stats.TotalSummaries != 1 {
+		t.Errorf("expected 1 summary, got %d", stats.TotalSummaries)
+	}
+	if stats.TotalPrompts != 1 {
+		t.Errorf("expected 1 prompt, got %d", stats.TotalPrompts)
+	}
+	if mock.scanCallNum != 2 {
+		t.Errorf("expected 2 scan calls, got %d", mock.scanCallNum)
+	}
+}
+
+func TestGetObservations_NoType_Paginated(t *testing.T) {
+	// scanByPrefix should paginate across multiple pages
+	mock := &mockDynamoDBClient{
+		scanOutputs: []*dynamodb.ScanOutput{
+			{
+				Items: []map[string]types.AttributeValue{
+					{
+						"id":               &types.AttributeValueMemberS{Value: "obs#1"},
+						"type":             &types.AttributeValueMemberS{Value: "decision"},
+						"source_id":        &types.AttributeValueMemberN{Value: "1"},
+						"project":          &types.AttributeValueMemberS{Value: "josh.bot"},
+						"session_id":       &types.AttributeValueMemberS{Value: "sess-abc"},
+						"created_at":       &types.AttributeValueMemberS{Value: "2026-02-15T12:00:00Z"},
+						"created_at_epoch": &types.AttributeValueMemberN{Value: "1739620800"},
+					},
+				},
+				LastEvaluatedKey: map[string]types.AttributeValue{
+					"id": &types.AttributeValueMemberS{Value: "obs#1"},
+				},
+			},
+			{
+				Items: []map[string]types.AttributeValue{
+					{
+						"id":               &types.AttributeValueMemberS{Value: "obs#2"},
+						"type":             &types.AttributeValueMemberS{Value: "feature"},
+						"source_id":        &types.AttributeValueMemberN{Value: "2"},
+						"project":          &types.AttributeValueMemberS{Value: "josh.bot"},
+						"session_id":       &types.AttributeValueMemberS{Value: "sess-def"},
+						"created_at":       &types.AttributeValueMemberS{Value: "2026-02-15T13:00:00Z"},
+						"created_at_epoch": &types.AttributeValueMemberN{Value: "1739624400"},
+					},
+				},
+			},
+		},
+	}
+
+	svc := NewMemService(mock, "josh-bot-mem")
+	obs, err := svc.GetObservations(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(obs) != 2 {
+		t.Errorf("expected 2 observations across pages, got %d", len(obs))
+	}
+	if mock.scanCallNum != 2 {
+		t.Errorf("expected 2 scan calls, got %d", mock.scanCallNum)
+	}
+}
+
+func TestGetSummaries_Paginated(t *testing.T) {
+	// queryByType should paginate across multiple pages
+	mock := &mockDynamoDBClient{
+		queryOutputs: []*dynamodb.QueryOutput{
+			{
+				Items: []map[string]types.AttributeValue{
+					{
+						"id":               &types.AttributeValueMemberS{Value: "summary#1"},
+						"type":             &types.AttributeValueMemberS{Value: "summary"},
+						"source_id":        &types.AttributeValueMemberN{Value: "1"},
+						"project":          &types.AttributeValueMemberS{Value: "josh.bot"},
+						"session_id":       &types.AttributeValueMemberS{Value: "sess-abc"},
+						"request":          &types.AttributeValueMemberS{Value: "First request"},
+						"created_at":       &types.AttributeValueMemberS{Value: "2026-02-15T12:00:00Z"},
+						"created_at_epoch": &types.AttributeValueMemberN{Value: "1739620800"},
+					},
+				},
+				LastEvaluatedKey: map[string]types.AttributeValue{
+					"id": &types.AttributeValueMemberS{Value: "summary#1"},
+				},
+			},
+			{
+				Items: []map[string]types.AttributeValue{
+					{
+						"id":               &types.AttributeValueMemberS{Value: "summary#2"},
+						"type":             &types.AttributeValueMemberS{Value: "summary"},
+						"source_id":        &types.AttributeValueMemberN{Value: "2"},
+						"project":          &types.AttributeValueMemberS{Value: "josh.bot"},
+						"session_id":       &types.AttributeValueMemberS{Value: "sess-def"},
+						"request":          &types.AttributeValueMemberS{Value: "Second request"},
+						"created_at":       &types.AttributeValueMemberS{Value: "2026-02-15T13:00:00Z"},
+						"created_at_epoch": &types.AttributeValueMemberN{Value: "1739624400"},
+					},
+				},
+			},
+		},
+	}
+
+	svc := NewMemService(mock, "josh-bot-mem")
+	summaries, err := svc.GetSummaries(context.Background(), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(summaries) != 2 {
+		t.Errorf("expected 2 summaries across pages, got %d", len(summaries))
+	}
+	if mock.queryCallNum != 2 {
+		t.Errorf("expected 2 query calls, got %d", mock.queryCallNum)
+	}
+}

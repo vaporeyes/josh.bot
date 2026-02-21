@@ -104,7 +104,7 @@ func (s *BotService) GetProjects(ctx context.Context) ([]domain.Project, error) 
 	indexName := itemTypeIndex
 	keyExpr := "item_type = :type"
 	filterExpr := notDeletedFilter
-	output, err := s.client.Query(ctx, &dynamodb.QueryInput{
+	items, err := s.queryAllPages(ctx, &dynamodb.QueryInput{
 		TableName:              &s.tableName,
 		IndexName:              &indexName,
 		KeyConditionExpression: &keyExpr,
@@ -117,8 +117,8 @@ func (s *BotService) GetProjects(ctx context.Context) ([]domain.Project, error) 
 		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
 
-	projects := make([]domain.Project, 0, len(output.Items))
-	for _, item := range output.Items {
+	projects := make([]domain.Project, 0, len(items))
+	for _, item := range items {
 		var p domain.Project
 		if err := attributevalue.UnmarshalMap(item, &p); err != nil {
 			return nil, fmt.Errorf("unmarshal project: %w", err)
@@ -225,7 +225,7 @@ func (s *BotService) GetLinks(ctx context.Context, tag string) ([]domain.Link, e
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Query(ctx, &dynamodb.QueryInput{
+	items, err := s.queryAllPages(ctx, &dynamodb.QueryInput{
 		TableName:                 &s.tableName,
 		IndexName:                 &indexName,
 		KeyConditionExpression:    &keyExpr,
@@ -236,8 +236,8 @@ func (s *BotService) GetLinks(ctx context.Context, tag string) ([]domain.Link, e
 		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
 
-	links := make([]domain.Link, 0, len(output.Items))
-	for _, item := range output.Items {
+	links := make([]domain.Link, 0, len(items))
+	for _, item := range items {
 		var l domain.Link
 		if err := attributevalue.UnmarshalMap(item, &l); err != nil {
 			return nil, fmt.Errorf("unmarshal link: %w", err)
@@ -343,7 +343,7 @@ func (s *BotService) GetNotes(ctx context.Context, tag string) ([]domain.Note, e
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Query(ctx, &dynamodb.QueryInput{
+	items, err := s.queryAllPages(ctx, &dynamodb.QueryInput{
 		TableName:                 &s.tableName,
 		IndexName:                 &indexName,
 		KeyConditionExpression:    &keyExpr,
@@ -354,8 +354,8 @@ func (s *BotService) GetNotes(ctx context.Context, tag string) ([]domain.Note, e
 		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
 
-	notes := make([]domain.Note, 0, len(output.Items))
-	for _, item := range output.Items {
+	notes := make([]domain.Note, 0, len(items))
+	for _, item := range items {
 		var n domain.Note
 		if err := attributevalue.UnmarshalMap(item, &n); err != nil {
 			return nil, fmt.Errorf("unmarshal note: %w", err)
@@ -460,7 +460,7 @@ func (s *BotService) GetTILs(ctx context.Context, tag string) ([]domain.TIL, err
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Query(ctx, &dynamodb.QueryInput{
+	items, err := s.queryAllPages(ctx, &dynamodb.QueryInput{
 		TableName:                 &s.tableName,
 		IndexName:                 &indexName,
 		KeyConditionExpression:    &keyExpr,
@@ -471,8 +471,8 @@ func (s *BotService) GetTILs(ctx context.Context, tag string) ([]domain.TIL, err
 		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
 
-	tils := make([]domain.TIL, 0, len(output.Items))
-	for _, item := range output.Items {
+	tils := make([]domain.TIL, 0, len(items))
+	for _, item := range items {
 		var t domain.TIL
 		if err := attributevalue.UnmarshalMap(item, &t); err != nil {
 			return nil, fmt.Errorf("unmarshal til: %w", err)
@@ -577,7 +577,7 @@ func (s *BotService) GetLogEntries(ctx context.Context, tag string) ([]domain.Lo
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Query(ctx, &dynamodb.QueryInput{
+	items, err := s.queryAllPages(ctx, &dynamodb.QueryInput{
 		TableName:                 &s.tableName,
 		IndexName:                 &indexName,
 		KeyConditionExpression:    &keyExpr,
@@ -588,8 +588,8 @@ func (s *BotService) GetLogEntries(ctx context.Context, tag string) ([]domain.Lo
 		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
 
-	entries := make([]domain.LogEntry, 0, len(output.Items))
-	for _, item := range output.Items {
+	entries := make([]domain.LogEntry, 0, len(items))
+	for _, item := range items {
 		var e domain.LogEntry
 		if err := attributevalue.UnmarshalMap(item, &e); err != nil {
 			return nil, fmt.Errorf("unmarshal log entry: %w", err)
@@ -695,7 +695,7 @@ func (s *BotService) GetDiaryEntries(ctx context.Context, tag string) ([]domain.
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Query(ctx, &dynamodb.QueryInput{
+	items, err := s.queryAllPages(ctx, &dynamodb.QueryInput{
 		TableName:                 &s.tableName,
 		IndexName:                 &indexName,
 		KeyConditionExpression:    &keyExpr,
@@ -706,8 +706,8 @@ func (s *BotService) GetDiaryEntries(ctx context.Context, tag string) ([]domain.
 		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
 
-	entries := make([]domain.DiaryEntry, 0, len(output.Items))
-	for _, item := range output.Items {
+	entries := make([]domain.DiaryEntry, 0, len(items))
+	for _, item := range items {
 		var e domain.DiaryEntry
 		if err := attributevalue.UnmarshalMap(item, &e); err != nil {
 			return nil, fmt.Errorf("unmarshal diary entry: %w", err)
@@ -840,6 +840,24 @@ func (s *BotService) SetIdempotencyRecord(ctx context.Context, record domain.Ide
 }
 
 // --- Shared Helpers ---
+
+// queryAllPages executes a DynamoDB Query and paginates through all results.
+// AIDEV-NOTE: DynamoDB returns at most 1MB per Query; this loops until LastEvaluatedKey is nil.
+func (s *BotService) queryAllPages(ctx context.Context, input *dynamodb.QueryInput) ([]map[string]types.AttributeValue, error) {
+	var allItems []map[string]types.AttributeValue
+	for {
+		output, err := s.client.Query(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+		allItems = append(allItems, output.Items...)
+		if output.LastEvaluatedKey == nil {
+			break
+		}
+		input.ExclusiveStartKey = output.LastEvaluatedKey
+	}
+	return allItems, nil
+}
 
 // softDelete sets deleted_at on an item instead of removing it.
 // AIDEV-NOTE: Soft-deleted items are excluded from list queries and get-by-id lookups.

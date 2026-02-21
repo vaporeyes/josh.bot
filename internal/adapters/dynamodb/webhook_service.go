@@ -85,13 +85,22 @@ func (s *WebhookService) GetWebhookEvents(ctx context.Context, eventType, source
 		input.ExpressionAttributeNames = exprNames
 	}
 
-	output, err := s.client.Query(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("dynamodb Query: %w", err)
+	// AIDEV-NOTE: Paginates using LastEvaluatedKey to handle result sets exceeding 1MB.
+	var allItems []map[string]types.AttributeValue
+	for {
+		output, err := s.client.Query(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("dynamodb Query: %w", err)
+		}
+		allItems = append(allItems, output.Items...)
+		if output.LastEvaluatedKey == nil {
+			break
+		}
+		input.ExclusiveStartKey = output.LastEvaluatedKey
 	}
 
-	events := make([]domain.WebhookEvent, 0, len(output.Items))
-	for _, item := range output.Items {
+	events := make([]domain.WebhookEvent, 0, len(allItems))
+	for _, item := range allItems {
 		var e domain.WebhookEvent
 		if err := attributevalue.UnmarshalMap(item, &e); err != nil {
 			return nil, fmt.Errorf("unmarshal webhook event: %w", err)

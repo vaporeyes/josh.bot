@@ -180,6 +180,38 @@ func TestWebhookService_GetWebhookEvent_FullID(t *testing.T) {
 	}
 }
 
+// --- Pagination Tests ---
+
+func TestWebhookService_GetWebhookEvents_Paginated(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		queryOutputs: []*dynamodb.QueryOutput{
+			{
+				Items: []map[string]types.AttributeValue{
+					webhookItemFixture("webhook#aaa", "message", "k8-one"),
+				},
+				LastEvaluatedKey: map[string]types.AttributeValue{"id": &types.AttributeValueMemberS{Value: "webhook#aaa"}},
+			},
+			{
+				Items: []map[string]types.AttributeValue{
+					webhookItemFixture("webhook#bbb", "alert", "cookbot"),
+				},
+			},
+		},
+	}
+	svc := NewWebhookService(mock, "test-table")
+
+	events, err := svc.GetWebhookEvents(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(events) != 2 {
+		t.Errorf("expected 2 events across pages, got %d", len(events))
+	}
+	if mock.queryCallNum != 2 {
+		t.Errorf("expected 2 query calls, got %d", mock.queryCallNum)
+	}
+}
+
 // --- Test fixtures ---
 
 func webhookEventFixture() webhookEventInput {

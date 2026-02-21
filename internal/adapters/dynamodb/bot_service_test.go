@@ -32,6 +32,12 @@ type mockDynamoDBClient struct {
 	deleteOutput *dynamodb.DeleteItemOutput
 	deleteErr    error
 	deleteInput  *dynamodb.DeleteItemInput
+
+	// AIDEV-NOTE: Multi-page support for pagination tests. When set, these take priority over single outputs.
+	scanOutputs  []*dynamodb.ScanOutput
+	scanCallNum  int
+	queryOutputs []*dynamodb.QueryOutput
+	queryCallNum int
 }
 
 func (m *mockDynamoDBClient) GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
@@ -45,11 +51,25 @@ func (m *mockDynamoDBClient) UpdateItem(ctx context.Context, params *dynamodb.Up
 
 func (m *mockDynamoDBClient) Scan(ctx context.Context, params *dynamodb.ScanInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
 	m.scanInput = params
+	if len(m.scanOutputs) > 0 {
+		idx := m.scanCallNum
+		m.scanCallNum++
+		if idx < len(m.scanOutputs) {
+			return m.scanOutputs[idx], m.scanErr
+		}
+	}
 	return m.scanOutput, m.scanErr
 }
 
 func (m *mockDynamoDBClient) Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
 	m.queryInput = params
+	if len(m.queryOutputs) > 0 {
+		idx := m.queryCallNum
+		m.queryCallNum++
+		if idx < len(m.queryOutputs) {
+			return m.queryOutputs[idx], m.queryErr
+		}
+	}
 	return m.queryOutput, m.queryErr
 }
 
@@ -1599,6 +1619,188 @@ func TestGetDiaryEntry_SoftDeleted(t *testing.T) {
 	var nfe *domain.NotFoundError
 	if !errors.As(err, &nfe) {
 		t.Errorf("expected NotFoundError, got %T: %v", err, err)
+	}
+}
+
+// --- Pagination Tests ---
+
+func TestGetProjects_Paginated(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		queryOutputs: []*dynamodb.QueryOutput{
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "project#a"}, "slug": &types.AttributeValueMemberS{Value: "a"}, "name": &types.AttributeValueMemberS{Value: "Project A"}, "item_type": &types.AttributeValueMemberS{Value: "project"}},
+				},
+				LastEvaluatedKey: map[string]types.AttributeValue{"id": &types.AttributeValueMemberS{Value: "project#a"}},
+			},
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "project#b"}, "slug": &types.AttributeValueMemberS{Value: "b"}, "name": &types.AttributeValueMemberS{Value: "Project B"}, "item_type": &types.AttributeValueMemberS{Value: "project"}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	projects, err := svc.GetProjects(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(projects) != 2 {
+		t.Errorf("expected 2 projects across pages, got %d", len(projects))
+	}
+	if mock.queryCallNum != 2 {
+		t.Errorf("expected 2 query calls, got %d", mock.queryCallNum)
+	}
+}
+
+func TestGetLinks_Paginated(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		queryOutputs: []*dynamodb.QueryOutput{
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "link#aaa"}, "url": &types.AttributeValueMemberS{Value: "https://a.com"}, "title": &types.AttributeValueMemberS{Value: "A"}, "item_type": &types.AttributeValueMemberS{Value: "link"}},
+				},
+				LastEvaluatedKey: map[string]types.AttributeValue{"id": &types.AttributeValueMemberS{Value: "link#aaa"}},
+			},
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "link#bbb"}, "url": &types.AttributeValueMemberS{Value: "https://b.com"}, "title": &types.AttributeValueMemberS{Value: "B"}, "item_type": &types.AttributeValueMemberS{Value: "link"}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	links, err := svc.GetLinks(context.Background(), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(links) != 2 {
+		t.Errorf("expected 2 links across pages, got %d", len(links))
+	}
+	if mock.queryCallNum != 2 {
+		t.Errorf("expected 2 query calls, got %d", mock.queryCallNum)
+	}
+}
+
+func TestGetNotes_Paginated(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		queryOutputs: []*dynamodb.QueryOutput{
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "note#a"}, "title": &types.AttributeValueMemberS{Value: "Note A"}, "body": &types.AttributeValueMemberS{Value: "body a"}, "item_type": &types.AttributeValueMemberS{Value: "note"}},
+				},
+				LastEvaluatedKey: map[string]types.AttributeValue{"id": &types.AttributeValueMemberS{Value: "note#a"}},
+			},
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "note#b"}, "title": &types.AttributeValueMemberS{Value: "Note B"}, "body": &types.AttributeValueMemberS{Value: "body b"}, "item_type": &types.AttributeValueMemberS{Value: "note"}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	notes, err := svc.GetNotes(context.Background(), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(notes) != 2 {
+		t.Errorf("expected 2 notes across pages, got %d", len(notes))
+	}
+	if mock.queryCallNum != 2 {
+		t.Errorf("expected 2 query calls, got %d", mock.queryCallNum)
+	}
+}
+
+func TestGetTILs_Paginated(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		queryOutputs: []*dynamodb.QueryOutput{
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "til#a"}, "title": &types.AttributeValueMemberS{Value: "TIL A"}, "body": &types.AttributeValueMemberS{Value: "a"}, "item_type": &types.AttributeValueMemberS{Value: "til"}},
+				},
+				LastEvaluatedKey: map[string]types.AttributeValue{"id": &types.AttributeValueMemberS{Value: "til#a"}},
+			},
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "til#b"}, "title": &types.AttributeValueMemberS{Value: "TIL B"}, "body": &types.AttributeValueMemberS{Value: "b"}, "item_type": &types.AttributeValueMemberS{Value: "til"}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	tils, err := svc.GetTILs(context.Background(), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tils) != 2 {
+		t.Errorf("expected 2 TILs across pages, got %d", len(tils))
+	}
+	if mock.queryCallNum != 2 {
+		t.Errorf("expected 2 query calls, got %d", mock.queryCallNum)
+	}
+}
+
+func TestGetLogEntries_Paginated(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		queryOutputs: []*dynamodb.QueryOutput{
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "log#a"}, "message": &types.AttributeValueMemberS{Value: "log a"}, "item_type": &types.AttributeValueMemberS{Value: "log"}},
+				},
+				LastEvaluatedKey: map[string]types.AttributeValue{"id": &types.AttributeValueMemberS{Value: "log#a"}},
+			},
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "log#b"}, "message": &types.AttributeValueMemberS{Value: "log b"}, "item_type": &types.AttributeValueMemberS{Value: "log"}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	entries, err := svc.GetLogEntries(context.Background(), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("expected 2 log entries across pages, got %d", len(entries))
+	}
+	if mock.queryCallNum != 2 {
+		t.Errorf("expected 2 query calls, got %d", mock.queryCallNum)
+	}
+}
+
+func TestGetDiaryEntries_Paginated(t *testing.T) {
+	mock := &mockDynamoDBClient{
+		queryOutputs: []*dynamodb.QueryOutput{
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "diary#a"}, "body": &types.AttributeValueMemberS{Value: "entry a"}, "item_type": &types.AttributeValueMemberS{Value: "diary"}},
+				},
+				LastEvaluatedKey: map[string]types.AttributeValue{"id": &types.AttributeValueMemberS{Value: "diary#a"}},
+			},
+			{
+				Items: []map[string]types.AttributeValue{
+					{"id": &types.AttributeValueMemberS{Value: "diary#b"}, "body": &types.AttributeValueMemberS{Value: "entry b"}, "item_type": &types.AttributeValueMemberS{Value: "diary"}},
+				},
+			},
+		},
+	}
+
+	svc := NewBotService(mock, "josh-bot-data")
+	entries, err := svc.GetDiaryEntries(context.Background(), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("expected 2 diary entries across pages, got %d", len(entries))
+	}
+	if mock.queryCallNum != 2 {
+		t.Errorf("expected 2 query calls, got %d", mock.queryCallNum)
 	}
 }
 

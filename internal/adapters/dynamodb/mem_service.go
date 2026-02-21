@@ -185,60 +185,73 @@ func (s *MemService) GetPrompt(ctx context.Context, id string) (domain.MemPrompt
 
 // GetStats scans the full table and aggregates counts by type and project.
 // AIDEV-NOTE: Full table scan is acceptable for mem table sizes (~hundreds to low thousands of items).
+// AIDEV-NOTE: Paginates using LastEvaluatedKey to handle tables exceeding 1MB per scan.
 func (s *MemService) GetStats(ctx context.Context) (domain.MemStats, error) {
-	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
-		TableName: &s.tableName,
-	})
-	if err != nil {
-		return domain.MemStats{}, fmt.Errorf("dynamodb Scan: %w", err)
-	}
-
 	stats := domain.MemStats{
 		ByType:    make(map[string]int),
 		ByProject: make(map[string]int),
 	}
 
-	for _, item := range output.Items {
-		itemType := ""
-		if typeAttr, ok := item["type"]; ok {
-			if s, ok := typeAttr.(*types.AttributeValueMemberS); ok {
-				itemType = s.Value
+	var startKey map[string]types.AttributeValue
+	for {
+		input := &dynamodb.ScanInput{
+			TableName:         &s.tableName,
+			ExclusiveStartKey: startKey,
+		}
+
+		output, err := s.client.Scan(ctx, input)
+		if err != nil {
+			return domain.MemStats{}, fmt.Errorf("dynamodb Scan: %w", err)
+		}
+
+		for _, item := range output.Items {
+			itemType := ""
+			if typeAttr, ok := item["type"]; ok {
+				if s, ok := typeAttr.(*types.AttributeValueMemberS); ok {
+					itemType = s.Value
+				}
+			}
+
+			project := ""
+			if projAttr, ok := item["project"]; ok {
+				if s, ok := projAttr.(*types.AttributeValueMemberS); ok {
+					project = s.Value
+				}
+			}
+
+			stats.ByType[itemType]++
+			if project != "" {
+				stats.ByProject[project]++
+			}
+
+			// Count by category based on id prefix
+			idStr := ""
+			if idAttr, ok := item["id"]; ok {
+				if s, ok := idAttr.(*types.AttributeValueMemberS); ok {
+					idStr = s.Value
+				}
+			}
+			switch {
+			case strings.HasPrefix(idStr, "obs#"):
+				stats.TotalObservations++
+			case strings.HasPrefix(idStr, "summary#"):
+				stats.TotalSummaries++
+			case strings.HasPrefix(idStr, "prompt#"):
+				stats.TotalPrompts++
 			}
 		}
 
-		project := ""
-		if projAttr, ok := item["project"]; ok {
-			if s, ok := projAttr.(*types.AttributeValueMemberS); ok {
-				project = s.Value
-			}
+		if output.LastEvaluatedKey == nil {
+			break
 		}
-
-		stats.ByType[itemType]++
-		if project != "" {
-			stats.ByProject[project]++
-		}
-
-		// Count by category based on id prefix
-		idStr := ""
-		if idAttr, ok := item["id"]; ok {
-			if s, ok := idAttr.(*types.AttributeValueMemberS); ok {
-				idStr = s.Value
-			}
-		}
-		switch {
-		case strings.HasPrefix(idStr, "obs#"):
-			stats.TotalObservations++
-		case strings.HasPrefix(idStr, "summary#"):
-			stats.TotalSummaries++
-		case strings.HasPrefix(idStr, "prompt#"):
-			stats.TotalPrompts++
-		}
+		startKey = output.LastEvaluatedKey
 	}
 
 	return stats, nil
 }
 
 // queryByType queries the type-index GSI for items of a given type, with optional project filter.
+// AIDEV-NOTE: Paginates using LastEvaluatedKey to handle result sets exceeding 1MB.
 func (s *MemService) queryByType(ctx context.Context, typeName, project string) ([]map[string]types.AttributeValue, error) {
 	indexName := typeIndexName
 	keyCondExpr := "#t = :type"
@@ -249,30 +262,46 @@ func (s *MemService) queryByType(ctx context.Context, typeName, project string) 
 		":type": &types.AttributeValueMemberS{Value: typeName},
 	}
 
-	input := &dynamodb.QueryInput{
-		TableName:                 &s.tableName,
-		IndexName:                 &indexName,
-		KeyConditionExpression:    &keyCondExpr,
-		ExpressionAttributeNames:  exprNames,
-		ExpressionAttributeValues: exprValues,
-		ScanIndexForward:          boolPtr(false),
-	}
-
 	if project != "" {
-		filterExpr := "project = :project"
-		input.FilterExpression = &filterExpr
-		input.ExpressionAttributeValues[":project"] = &types.AttributeValueMemberS{Value: project}
+		exprValues[":project"] = &types.AttributeValueMemberS{Value: project}
 	}
 
-	output, err := s.client.Query(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("dynamodb Query: %w", err)
+	var allItems []map[string]types.AttributeValue
+	var startKey map[string]types.AttributeValue
+	for {
+		input := &dynamodb.QueryInput{
+			TableName:                 &s.tableName,
+			IndexName:                 &indexName,
+			KeyConditionExpression:    &keyCondExpr,
+			ExpressionAttributeNames:  exprNames,
+			ExpressionAttributeValues: exprValues,
+			ScanIndexForward:          boolPtr(false),
+			ExclusiveStartKey:         startKey,
+		}
+
+		if project != "" {
+			filterExpr := "project = :project"
+			input.FilterExpression = &filterExpr
+		}
+
+		output, err := s.client.Query(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("dynamodb Query: %w", err)
+		}
+
+		allItems = append(allItems, output.Items...)
+
+		if output.LastEvaluatedKey == nil {
+			break
+		}
+		startKey = output.LastEvaluatedKey
 	}
 
-	return output.Items, nil
+	return allItems, nil
 }
 
 // scanByPrefix scans the table for items whose id begins with the given prefix.
+// AIDEV-NOTE: Paginates using LastEvaluatedKey to handle tables exceeding 1MB per scan.
 func (s *MemService) scanByPrefix(ctx context.Context, prefix, project string) ([]map[string]types.AttributeValue, error) {
 	filterExpr := "begins_with(id, :prefix)"
 	exprValues := map[string]types.AttributeValue{
@@ -284,16 +313,28 @@ func (s *MemService) scanByPrefix(ctx context.Context, prefix, project string) (
 		exprValues[":project"] = &types.AttributeValueMemberS{Value: project}
 	}
 
-	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
-		TableName:                 &s.tableName,
-		FilterExpression:          &filterExpr,
-		ExpressionAttributeValues: exprValues,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("dynamodb Scan: %w", err)
+	var allItems []map[string]types.AttributeValue
+	var startKey map[string]types.AttributeValue
+	for {
+		output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
+			TableName:                 &s.tableName,
+			FilterExpression:          &filterExpr,
+			ExpressionAttributeValues: exprValues,
+			ExclusiveStartKey:         startKey,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("dynamodb Scan: %w", err)
+		}
+
+		allItems = append(allItems, output.Items...)
+
+		if output.LastEvaluatedKey == nil {
+			break
+		}
+		startKey = output.LastEvaluatedKey
 	}
 
-	return output.Items, nil
+	return allItems, nil
 }
 
 // allowedMemoryFields defines which memory fields can be updated via PUT.
