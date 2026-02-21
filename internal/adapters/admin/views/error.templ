@@ -1,0 +1,15 @@
+// ABOUTME: Error display partial for showing API errors inline.
+// ABOUTME: Used by handlers when API calls fail.
+package views
+
+templ ErrorMessage(msg string) {
+	<div class="flash flash-error" role="alert">
+		<strong>Error:</strong> { msg }
+	</div>
+}
+
+templ SuccessMessage(msg string) {
+	<div class="flash flash-success" role="status">
+		{ msg }
+	</div>
+}

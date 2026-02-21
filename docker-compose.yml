@@ -1,0 +1,13 @@
+# ABOUTME: Docker Compose for running the admin dashboard locally.
+# ABOUTME: Reads API_KEY from host env or .env file, proxies to api.josh.bot.
+services:
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile.admin
+    ports:
+      - "8081:8081"
+    environment:
+      - API_KEY=${API_KEY}
+      - API_BASE_URL=${API_BASE_URL:-https://api.josh.bot}
+      - ADMIN_ADDR=:8081

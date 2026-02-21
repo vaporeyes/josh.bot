@@ -129,6 +129,28 @@ tasks:
       - task: lint
       - task: test
 
+  admin:generate:
+    desc: Generate Go code from templ files
+    cmds:
+      - templ generate ./internal/adapters/admin/views/
+
+  admin:build:
+    desc: Build the admin dashboard Docker image
+    deps: [admin:generate]
+    cmds:
+      - docker compose build admin
+
+  admin:up:
+    desc: Start the admin dashboard (requires API_KEY env var)
+    cmds:
+      - docker compose up admin
+
+  admin:dev:
+    desc: Run admin dashboard locally without Docker (requires API_KEY env var)
+    deps: [admin:generate]
+    cmds:
+      - go run ./cmd/admin/
+
   deploy:
     desc: Full deploy (check, package, terraform apply)
     cmds:

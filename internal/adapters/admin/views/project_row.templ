@@ -1,0 +1,29 @@
+// ABOUTME: Single project table row, returned as an htmx partial on create/update.
+// ABOUTME: Includes inline edit and delete action buttons.
+package views
+
+import "github.com/jduncan/josh-bot/internal/domain"
+
+templ ProjectRow(p domain.Project) {
+	<tr id={ "project-" + p.Slug }>
+		<td>{ p.Slug }</td>
+		<td>{ p.Name }</td>
+		<td>{ p.Stack }</td>
+		<td>{ p.Status }</td>
+		<td>
+			if p.URL != "" {
+				<a href={ templ.SafeURL(p.URL) } target="_blank">{ p.URL }</a>
+			}
+		</td>
+		<td class="actions">
+			<a href={ templ.SafeURL("/admin/projects/" + p.Slug + "/edit") } role="button" class="outline secondary">Edit</a>
+			<button
+				hx-delete={ "/admin/projects/" + p.Slug }
+				hx-target={ "#project-" + p.Slug }
+				hx-swap="outerHTML"
+				hx-confirm="Delete this project?"
+				class="outline secondary"
+			>Delete</button>
+		</td>
+	</tr>
+}

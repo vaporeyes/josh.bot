@@ -1,0 +1,31 @@
+// ABOUTME: Dashboard home page showing current status overview.
+// ABOUTME: Serves as the landing page for the admin UI at /admin/.
+package views
+
+import "github.com/jduncan/josh-bot/internal/domain"
+
+templ Dashboard(status domain.Status) {
+	@Layout("Dashboard") {
+		<hgroup>
+			<h1>Dashboard</h1>
+			<p>Admin panel for josh.bot</p>
+		</hgroup>
+		<article>
+			<header>Status</header>
+			<dl>
+				<dt>Name</dt>
+				<dd>{ status.Name }</dd>
+				<dt>Title</dt>
+				<dd>{ status.Title }</dd>
+				<dt>Location</dt>
+				<dd>{ status.Location }</dd>
+				<dt>Status</dt>
+				<dd>{ status.Status }</dd>
+				<dt>Availability</dt>
+				<dd>{ status.Availability }</dd>
+				<dt>Current Activity</dt>
+				<dd>{ status.CurrentActivity }</dd>
+			</dl>
+		</article>
+	}
+}

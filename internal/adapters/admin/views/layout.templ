@@ -1,0 +1,35 @@
+// ABOUTME: Base HTML layout shell with Pico CSS and htmx CDN links.
+// ABOUTME: Wraps all admin pages with consistent navigation and styling.
+package views
+
+templ Layout(title string) {
+	<!DOCTYPE html>
+	<html lang="en" data-theme="light">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title } - josh.bot admin</title>
+			<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"/>
+			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+			<script src="https://unpkg.com/htmx-ext-json-enc@2.0.1/json-enc.js"></script>
+			<style>
+				body > nav { margin-bottom: 0; }
+				.container { padding-top: 1rem; }
+				table td { vertical-align: middle; }
+				.actions { white-space: nowrap; }
+				.actions a, .actions button { margin-left: 0.5rem; }
+				details[role="list"] summary { padding: 0.5rem 1rem; }
+				.flash { padding: 0.75rem 1rem; margin-bottom: 1rem; border-radius: 4px; }
+				.flash-success { background: var(--pico-ins-color); }
+				.flash-error { background: var(--pico-del-color); }
+				[data-loading] { opacity: 0.6; }
+			</style>
+		</head>
+		<body hx-ext="json-enc">
+			@Nav()
+			<main class="container">
+				{ children... }
+			</main>
+		</body>
+	</html>
+}

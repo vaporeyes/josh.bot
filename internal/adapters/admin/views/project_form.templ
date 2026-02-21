@@ -1,0 +1,74 @@
+// ABOUTME: Create/edit form for projects, rendered as a full page.
+// ABOUTME: Uses htmx json-enc for JSON serialization on form submit.
+package views
+
+import "github.com/jduncan/josh-bot/internal/domain"
+
+templ ProjectForm(p domain.Project, isEdit bool, errMsg string) {
+	@Layout(formTitle(isEdit, "Project")) {
+		<hgroup>
+			if isEdit {
+				<h1>Edit Project: { p.Slug }</h1>
+			} else {
+				<h1>Add Project</h1>
+			}
+			<p><a href="/admin/projects">&larr; Back to Projects</a></p>
+		</hgroup>
+		if errMsg != "" {
+			@ErrorMessage(errMsg)
+		}
+		<form
+			if isEdit {
+				hx-put={ "/admin/projects/" + p.Slug }
+			} else {
+				hx-post="/admin/projects"
+			}
+			hx-ext="json-enc"
+		>
+			if !isEdit {
+				<label>
+					Slug
+					<input type="text" name="slug" value={ p.Slug } required placeholder="my-project"/>
+				</label>
+			}
+			<label>
+				Name
+				<input type="text" name="name" value={ p.Name } required placeholder="My Project"/>
+			</label>
+			<label>
+				Stack
+				<input type="text" name="stack" value={ p.Stack } placeholder="Go, TypeScript, etc."/>
+			</label>
+			<label>
+				Description
+				<textarea name="description" placeholder="Brief description...">{ p.Description }</textarea>
+			</label>
+			<label>
+				URL
+				<input type="url" name="url" value={ p.URL } placeholder="https://github.com/..."/>
+			</label>
+			<label>
+				Status
+				<select name="status">
+					<option value="active" selected?={ p.Status == "active" || p.Status == "" }>Active</option>
+					<option value="archived" selected?={ p.Status == "archived" }>Archived</option>
+					<option value="planned" selected?={ p.Status == "planned" }>Planned</option>
+				</select>
+			</label>
+			<button type="submit">
+				if isEdit {
+					Update Project
+				} else {
+					Create Project
+				}
+			</button>
+		</form>
+	}
+}
+
+func formTitle(isEdit bool, entity string) string {
+	if isEdit {
+		return "Edit " + entity
+	}
+	return "Add " + entity
+}

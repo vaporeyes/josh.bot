@@ -1,0 +1,13 @@
+# ABOUTME: Docker build context exclusions to speed up image builds.
+# ABOUTME: Excludes git history, terraform state, node_modules, and other non-essential files.
+.git
+.claude
+.github
+node_modules
+src
+public
+terraform/*.tfstate*
+terraform/.terraform
+*.zip
+*.md
+!README.md
