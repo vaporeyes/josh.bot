@@ -40,8 +40,11 @@ Uses DynamoDB **single-table design** with the `id` partition key and prefixed k
 | `log#` | `log#a1b2c3d4e5f6a1b2` | Activity log entries (random ID) |
 | `diary#` | `diary#a1b2c3d4e5f6a1b2` | Diary/journal entries (random ID) |
 | `webhook#` | `webhook#a1b2c3d4e5f6a1b2` | Inbound webhook events (random ID, immutable) |
+| `idem#` | `idem#/v1/notes#abc123` | Idempotency records (24h TTL, auto-cleaned) |
 
 Link IDs are derived from the URL via SHA256, giving automatic deduplication -- saving the same URL twice updates the existing entry. Notes, TILs, log entries, and diary entries use random 8-byte hex IDs.
+
+The `josh-bot-data` table has an `item-type-index` GSI (partition key: `item_type`, sort key: `created_at`) that enables efficient per-type queries instead of full table scans. All list operations query this GSI. DynamoDB TTL is enabled on `expires_at` for automatic cleanup of idempotency records.
 
 Lift/workout data lives in a separate `josh-bot-lifts` table with a `date-index` GSI for time-range queries. Lift IDs are deterministic (date + exercise + set order) making CSV re-imports idempotent.
 
@@ -116,6 +119,8 @@ task seed           # Seed DynamoDB with initial data
 ## API Reference
 
 All endpoints return JSON. Write endpoints require an `x-api-key` header. `GET /v1/status` and `GET /v1/metrics` are the only public (unauthenticated) routes.
+
+POST create endpoints accept an optional `X-Idempotency-Key` header -- duplicate requests with the same key within 24 hours return the original response. DELETE endpoints perform soft deletes (set `deleted_at` rather than removing the record).
 
 ### Status
 
@@ -491,6 +496,17 @@ echo '{"action":"deploy","target":"prod"}' | scripts/send-webhook -p -t deploy
 
 Requires `WEBHOOK_SECRET` env var. Optionally set `JOSH_BOT_API_URL` to override the target (defaults to `https://api.josh.bot`).
 
+#### backfill-item-type
+
+Backfill existing DynamoDB items with `item_type` and `created_at` attributes required by the `item-type-index` GSI.
+
+```bash
+# Run backfill (idempotent, safe to re-run)
+./scripts/backfill-item-type.sh
+```
+
+Fetches each item to check which timestamp fields exist, then sets `item_type` based on the ID prefix. Items missing `created_at` get it copied from `updated_at` or set to the current time.
+
 #### sync-mem
 
 Sync claude-mem SQLite data to the `josh-bot-mem` DynamoDB table.
@@ -517,7 +533,7 @@ Managed with Terraform in the `terraform/` directory:
 |----------|---------|
 | **AWS Lambda** (`provided.al2023`, ARM64) | Runs the Go API |
 | **API Gateway** (HTTP API) | Routes requests to Lambda (10 rps / 20 burst rate limit, default endpoint disabled) |
-| **DynamoDB** `josh-bot-data` (PAY_PER_REQUEST) | Single-table store for status, projects, links, notes, TILs, log entries |
+| **DynamoDB** `josh-bot-data` (PAY_PER_REQUEST) | Single-table store for status, projects, links, notes, TILs, log entries. `item-type-index` GSI for per-type queries. TTL on `expires_at` for idempotency record cleanup |
 | **DynamoDB** `josh-bot-lifts` (PAY_PER_REQUEST) | Workout/lift data with `date-index` GSI |
 | **DynamoDB** `josh-bot-mem` (PAY_PER_REQUEST) | Claude-mem data (observations, summaries, prompts) with `type-index` GSI |
 | **ACM** | TLS certificate for `api.josh.bot` (DNS validation + CNAME managed in Cloudflare) |
@@ -542,6 +558,9 @@ Required GitHub secrets: `AWS_ACCOUNT_ID`, `TERRAFORM_BUCKET`
 - **Structured logging**: JSON-formatted `slog` output in Lambda with request/response logging (method, path, status, client IP)
 - **Custom error types**: `NotFoundError` and `ValidationError` with `errors.As` support for correct HTTP status mapping (404/400/500)
 - **Domain validation**: `Validate()` methods on all entity types enforce required fields at the domain layer
+- **Idempotency**: POST creates accept an `X-Idempotency-Key` header. Duplicate requests within 24 hours return the original response without creating a second record
+- **Soft deletes**: DELETE endpoints set a `deleted_at` timestamp instead of removing data. Soft-deleted items are excluded from list queries and return 404 on direct lookup
+- **GSI-based queries**: All list operations use the `item-type-index` GSI (Query) instead of full table Scans
 - **Field allowlists**: Write endpoints only accept known fields, preventing arbitrary data injection
 - **API key auth**: All write endpoints (and most reads) require `x-api-key` header
 - **Rate limiting**: 10 requests/sec with 20 burst at the API Gateway stage level
