@@ -35,6 +35,7 @@ func (s *WebhookService) CreateWebhookEvent(ctx context.Context, event domain.We
 	if err != nil {
 		return fmt.Errorf("marshal webhook event: %w", err)
 	}
+	item["item_type"] = &types.AttributeValueMemberS{Value: "webhook"}
 
 	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
@@ -49,37 +50,44 @@ func (s *WebhookService) CreateWebhookEvent(ctx context.Context, event domain.We
 
 // GetWebhookEvents fetches all webhook events, optionally filtered by type and/or source.
 func (s *WebhookService) GetWebhookEvents(ctx context.Context, eventType, source string) ([]domain.WebhookEvent, error) {
-	filterExpr := "begins_with(id, :prefix)"
+	indexName := itemTypeIndex
+	keyExpr := "item_type = :type"
 	exprValues := map[string]types.AttributeValue{
-		":prefix": &types.AttributeValueMemberS{Value: "webhook#"},
+		":type": &types.AttributeValueMemberS{Value: "webhook"},
 	}
 	// AIDEV-NOTE: "type" is a DynamoDB reserved word, so we alias it with ExpressionAttributeNames.
 	exprNames := map[string]string{}
 
+	var filterParts []string
 	if eventType != "" {
-		filterExpr += " AND #t = :eventType"
+		filterParts = append(filterParts, "#t = :eventType")
 		exprValues[":eventType"] = &types.AttributeValueMemberS{Value: eventType}
 		exprNames["#t"] = "type"
 	}
 
 	if source != "" {
-		filterExpr += " AND #s = :source"
+		filterParts = append(filterParts, "#s = :source")
 		exprValues[":source"] = &types.AttributeValueMemberS{Value: source}
 		exprNames["#s"] = "source"
 	}
 
-	input := &dynamodb.ScanInput{
+	input := &dynamodb.QueryInput{
 		TableName:                 &s.tableName,
-		FilterExpression:          &filterExpr,
+		IndexName:                 &indexName,
+		KeyConditionExpression:    &keyExpr,
 		ExpressionAttributeValues: exprValues,
+	}
+	if len(filterParts) > 0 {
+		f := strings.Join(filterParts, " AND ")
+		input.FilterExpression = &f
 	}
 	if len(exprNames) > 0 {
 		input.ExpressionAttributeNames = exprNames
 	}
 
-	output, err := s.client.Scan(ctx, input)
+	output, err := s.client.Query(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("dynamodb Scan: %w", err)
+		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
 
 	events := make([]domain.WebhookEvent, 0, len(output.Items))

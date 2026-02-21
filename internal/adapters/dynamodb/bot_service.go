@@ -91,21 +91,25 @@ func (s *BotService) UpdateStatus(ctx context.Context, fields map[string]any) er
 	return s.updateItem(ctx, "status", fields)
 }
 
+// AIDEV-NOTE: GSI name for item_type-based queries on josh-bot-data table.
+const itemTypeIndex = "item-type-index"
+
 // --- Project Operations ---
 
-// GetProjects fetches all projects from DynamoDB using a Scan with a filter.
-// AIDEV-NOTE: Uses Scan instead of Query because the table has no sort key.
+// GetProjects fetches all projects from DynamoDB using a Query on the item-type-index GSI.
 func (s *BotService) GetProjects(ctx context.Context) ([]domain.Project, error) {
-	filterExpr := "begins_with(id, :prefix)"
-	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
-		TableName:        &s.tableName,
-		FilterExpression: &filterExpr,
+	indexName := itemTypeIndex
+	keyExpr := "item_type = :type"
+	output, err := s.client.Query(ctx, &dynamodb.QueryInput{
+		TableName:              &s.tableName,
+		IndexName:              &indexName,
+		KeyConditionExpression: &keyExpr,
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":prefix": &types.AttributeValueMemberS{Value: "project#"},
+			":type": &types.AttributeValueMemberS{Value: "project"},
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("dynamodb Scan: %w", err)
+		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
 
 	projects := make([]domain.Project, 0, len(output.Items))
@@ -148,7 +152,9 @@ func (s *BotService) CreateProject(ctx context.Context, project domain.Project) 
 	if err := project.Validate(); err != nil {
 		return err
 	}
-	project.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().UTC().Format(time.RFC3339)
+	project.CreatedAt = now
+	project.UpdatedAt = now
 
 	item, err := attributevalue.MarshalMap(project)
 	if err != nil {
@@ -156,6 +162,7 @@ func (s *BotService) CreateProject(ctx context.Context, project domain.Project) 
 	}
 	// Set the partition key using the slug
 	item["id"] = &types.AttributeValueMemberS{Value: "project#" + project.Slug}
+	item["item_type"] = &types.AttributeValueMemberS{Value: "project"}
 
 	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
@@ -207,23 +214,28 @@ var allowedLinkFields = map[string]bool{
 
 // GetLinks fetches all links from DynamoDB, optionally filtered by tag.
 func (s *BotService) GetLinks(ctx context.Context, tag string) ([]domain.Link, error) {
-	filterExpr := "begins_with(id, :prefix)"
+	indexName := itemTypeIndex
+	keyExpr := "item_type = :type"
 	exprValues := map[string]types.AttributeValue{
-		":prefix": &types.AttributeValueMemberS{Value: "link#"},
+		":type": &types.AttributeValueMemberS{Value: "link"},
 	}
 
+	var filterExpr *string
 	if tag != "" {
-		filterExpr += " AND contains(tags, :tag)"
+		f := "contains(tags, :tag)"
+		filterExpr = &f
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
+	output, err := s.client.Query(ctx, &dynamodb.QueryInput{
 		TableName:                 &s.tableName,
-		FilterExpression:          &filterExpr,
+		IndexName:                 &indexName,
+		KeyConditionExpression:    &keyExpr,
+		FilterExpression:          filterExpr,
 		ExpressionAttributeValues: exprValues,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("dynamodb Scan: %w", err)
+		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
 
 	links := make([]domain.Link, 0, len(output.Items))
@@ -276,6 +288,7 @@ func (s *BotService) CreateLink(ctx context.Context, link domain.Link) error {
 	if err != nil {
 		return fmt.Errorf("marshal link: %w", err)
 	}
+	item["item_type"] = &types.AttributeValueMemberS{Value: "link"}
 
 	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
@@ -326,23 +339,28 @@ var allowedNoteFields = map[string]bool{
 
 // GetNotes fetches all notes from DynamoDB, optionally filtered by tag.
 func (s *BotService) GetNotes(ctx context.Context, tag string) ([]domain.Note, error) {
-	filterExpr := "begins_with(id, :prefix)"
+	indexName := itemTypeIndex
+	keyExpr := "item_type = :type"
 	exprValues := map[string]types.AttributeValue{
-		":prefix": &types.AttributeValueMemberS{Value: "note#"},
+		":type": &types.AttributeValueMemberS{Value: "note"},
 	}
 
+	var filterExpr *string
 	if tag != "" {
-		filterExpr += " AND contains(tags, :tag)"
+		f := "contains(tags, :tag)"
+		filterExpr = &f
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
+	output, err := s.client.Query(ctx, &dynamodb.QueryInput{
 		TableName:                 &s.tableName,
-		FilterExpression:          &filterExpr,
+		IndexName:                 &indexName,
+		KeyConditionExpression:    &keyExpr,
+		FilterExpression:          filterExpr,
 		ExpressionAttributeValues: exprValues,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("dynamodb Scan: %w", err)
+		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
 
 	notes := make([]domain.Note, 0, len(output.Items))
@@ -394,6 +412,7 @@ func (s *BotService) CreateNote(ctx context.Context, note domain.Note) error {
 	if err != nil {
 		return fmt.Errorf("marshal note: %w", err)
 	}
+	item["item_type"] = &types.AttributeValueMemberS{Value: "note"}
 
 	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
@@ -444,23 +463,28 @@ var allowedTILFields = map[string]bool{
 
 // GetTILs fetches all TIL entries from DynamoDB, optionally filtered by tag.
 func (s *BotService) GetTILs(ctx context.Context, tag string) ([]domain.TIL, error) {
-	filterExpr := "begins_with(id, :prefix)"
+	indexName := itemTypeIndex
+	keyExpr := "item_type = :type"
 	exprValues := map[string]types.AttributeValue{
-		":prefix": &types.AttributeValueMemberS{Value: "til#"},
+		":type": &types.AttributeValueMemberS{Value: "til"},
 	}
 
+	var filterExpr *string
 	if tag != "" {
-		filterExpr += " AND contains(tags, :tag)"
+		f := "contains(tags, :tag)"
+		filterExpr = &f
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
+	output, err := s.client.Query(ctx, &dynamodb.QueryInput{
 		TableName:                 &s.tableName,
-		FilterExpression:          &filterExpr,
+		IndexName:                 &indexName,
+		KeyConditionExpression:    &keyExpr,
+		FilterExpression:          filterExpr,
 		ExpressionAttributeValues: exprValues,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("dynamodb Scan: %w", err)
+		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
 
 	tils := make([]domain.TIL, 0, len(output.Items))
@@ -512,6 +536,7 @@ func (s *BotService) CreateTIL(ctx context.Context, til domain.TIL) error {
 	if err != nil {
 		return fmt.Errorf("marshal til: %w", err)
 	}
+	item["item_type"] = &types.AttributeValueMemberS{Value: "til"}
 
 	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
@@ -562,23 +587,28 @@ var allowedLogEntryFields = map[string]bool{
 
 // GetLogEntries fetches all log entries from DynamoDB, optionally filtered by tag.
 func (s *BotService) GetLogEntries(ctx context.Context, tag string) ([]domain.LogEntry, error) {
-	filterExpr := "begins_with(id, :prefix)"
+	indexName := itemTypeIndex
+	keyExpr := "item_type = :type"
 	exprValues := map[string]types.AttributeValue{
-		":prefix": &types.AttributeValueMemberS{Value: "log#"},
+		":type": &types.AttributeValueMemberS{Value: "log"},
 	}
 
+	var filterExpr *string
 	if tag != "" {
-		filterExpr += " AND contains(tags, :tag)"
+		f := "contains(tags, :tag)"
+		filterExpr = &f
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
+	output, err := s.client.Query(ctx, &dynamodb.QueryInput{
 		TableName:                 &s.tableName,
-		FilterExpression:          &filterExpr,
+		IndexName:                 &indexName,
+		KeyConditionExpression:    &keyExpr,
+		FilterExpression:          filterExpr,
 		ExpressionAttributeValues: exprValues,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("dynamodb Scan: %w", err)
+		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
 
 	entries := make([]domain.LogEntry, 0, len(output.Items))
@@ -630,6 +660,7 @@ func (s *BotService) CreateLogEntry(ctx context.Context, entry domain.LogEntry) 
 	if err != nil {
 		return fmt.Errorf("marshal log entry: %w", err)
 	}
+	item["item_type"] = &types.AttributeValueMemberS{Value: "log"}
 
 	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,
@@ -681,23 +712,28 @@ var allowedDiaryEntryFields = map[string]bool{
 
 // GetDiaryEntries fetches all diary entries from DynamoDB, optionally filtered by tag.
 func (s *BotService) GetDiaryEntries(ctx context.Context, tag string) ([]domain.DiaryEntry, error) {
-	filterExpr := "begins_with(id, :prefix)"
+	indexName := itemTypeIndex
+	keyExpr := "item_type = :type"
 	exprValues := map[string]types.AttributeValue{
-		":prefix": &types.AttributeValueMemberS{Value: "diary#"},
+		":type": &types.AttributeValueMemberS{Value: "diary"},
 	}
 
+	var filterExpr *string
 	if tag != "" {
-		filterExpr += " AND contains(tags, :tag)"
+		f := "contains(tags, :tag)"
+		filterExpr = &f
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
-	output, err := s.client.Scan(ctx, &dynamodb.ScanInput{
+	output, err := s.client.Query(ctx, &dynamodb.QueryInput{
 		TableName:                 &s.tableName,
-		FilterExpression:          &filterExpr,
+		IndexName:                 &indexName,
+		KeyConditionExpression:    &keyExpr,
+		FilterExpression:          filterExpr,
 		ExpressionAttributeValues: exprValues,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("dynamodb Scan: %w", err)
+		return nil, fmt.Errorf("dynamodb Query: %w", err)
 	}
 
 	entries := make([]domain.DiaryEntry, 0, len(output.Items))
@@ -756,6 +792,7 @@ func (s *BotService) CreateDiaryEntry(ctx context.Context, entry domain.DiaryEnt
 	if err != nil {
 		return fmt.Errorf("marshal diary entry: %w", err)
 	}
+	item["item_type"] = &types.AttributeValueMemberS{Value: "diary"}
 
 	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &s.tableName,

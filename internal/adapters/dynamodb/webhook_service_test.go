@@ -42,11 +42,20 @@ func TestWebhookService_CreateWebhookEvent(t *testing.T) {
 	if _, ok := mock.putInput.Item["created_at"]; !ok {
 		t.Error("expected created_at to be set")
 	}
+
+	// Verify item_type is set for GSI
+	typeAttr, ok := mock.putInput.Item["item_type"]
+	if !ok {
+		t.Fatal("expected 'item_type' in put item")
+	}
+	if typeAttr.(*types.AttributeValueMemberS).Value != "webhook" {
+		t.Errorf("expected item_type 'webhook', got %q", typeAttr.(*types.AttributeValueMemberS).Value)
+	}
 }
 
 func TestWebhookService_GetWebhookEvents_NoFilters(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{
+		queryOutput: &dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{
 				webhookItemFixture("webhook#aaa", "message", "k8-one"),
 				webhookItemFixture("webhook#bbb", "alert", "cookbot"),
@@ -63,18 +72,18 @@ func TestWebhookService_GetWebhookEvents_NoFilters(t *testing.T) {
 		t.Errorf("expected 2 events, got %d", len(events))
 	}
 
-	// Verify scan filter uses begins_with
-	if mock.scanInput == nil {
-		t.Fatal("expected Scan to be called")
+	// Verify Query was used on GSI
+	if mock.queryInput == nil {
+		t.Fatal("expected Query to be called")
 	}
-	if !strings.Contains(*mock.scanInput.FilterExpression, "begins_with(id, :prefix)") {
-		t.Errorf("expected begins_with filter, got %q", *mock.scanInput.FilterExpression)
+	if *mock.queryInput.IndexName != "item-type-index" {
+		t.Errorf("expected index 'item-type-index', got %q", *mock.queryInput.IndexName)
 	}
 }
 
 func TestWebhookService_GetWebhookEvents_FilterByType(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{
+		queryOutput: &dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{
 				webhookItemFixture("webhook#aaa", "alert", "cookbot"),
 			},
@@ -91,7 +100,7 @@ func TestWebhookService_GetWebhookEvents_FilterByType(t *testing.T) {
 	}
 
 	// Verify type filter was included
-	filter := *mock.scanInput.FilterExpression
+	filter := *mock.queryInput.FilterExpression
 	if !strings.Contains(filter, "#t = :eventType") {
 		t.Errorf("expected type filter in expression, got %q", filter)
 	}
@@ -99,7 +108,7 @@ func TestWebhookService_GetWebhookEvents_FilterByType(t *testing.T) {
 
 func TestWebhookService_GetWebhookEvents_FilterBySource(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{
+		queryOutput: &dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{
 				webhookItemFixture("webhook#aaa", "message", "k8-one"),
 			},
@@ -115,7 +124,7 @@ func TestWebhookService_GetWebhookEvents_FilterBySource(t *testing.T) {
 		t.Errorf("expected 1 event, got %d", len(events))
 	}
 
-	filter := *mock.scanInput.FilterExpression
+	filter := *mock.queryInput.FilterExpression
 	if !strings.Contains(filter, "#s = :source") {
 		t.Errorf("expected source filter in expression, got %q", filter)
 	}

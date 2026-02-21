@@ -190,7 +190,7 @@ func TestUpdateStatus_DynamoDBError(t *testing.T) {
 
 func TestGetProjects_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{
+		queryOutput: &dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{
 				{
 					"id":          &types.AttributeValueMemberS{Value: "project#modular-aws-backend"},
@@ -200,6 +200,7 @@ func TestGetProjects_Success(t *testing.T) {
 					"description": &types.AttributeValueMemberS{Value: "Read-only S3/DynamoDB access."},
 					"url":         &types.AttributeValueMemberS{Value: "https://github.com/vaporeyes/josh-bot"},
 					"status":      &types.AttributeValueMemberS{Value: "active"},
+					"item_type":   &types.AttributeValueMemberS{Value: "project"},
 				},
 				{
 					"id":          &types.AttributeValueMemberS{Value: "project#modernist-cookbot"},
@@ -209,6 +210,7 @@ func TestGetProjects_Success(t *testing.T) {
 					"description": &types.AttributeValueMemberS{Value: "AI sous-chef for sous-vide."},
 					"url":         &types.AttributeValueMemberS{Value: "https://github.com/vaporeyes/cookbot"},
 					"status":      &types.AttributeValueMemberS{Value: "active"},
+					"item_type":   &types.AttributeValueMemberS{Value: "project"},
 				},
 			},
 		},
@@ -228,11 +230,21 @@ func TestGetProjects_Success(t *testing.T) {
 	if projects[1].Name != "Modernist Cookbot" {
 		t.Errorf("expected name 'Modernist Cookbot', got '%s'", projects[1].Name)
 	}
+	// Verify Query was used (not Scan) on item-type-index GSI
+	if mock.queryInput == nil {
+		t.Fatal("expected Query to be called")
+	}
+	if mock.scanInput != nil {
+		t.Error("expected Scan NOT to be called")
+	}
+	if *mock.queryInput.IndexName != "item-type-index" {
+		t.Errorf("expected index 'item-type-index', got '%s'", *mock.queryInput.IndexName)
+	}
 }
 
 func TestGetProjects_Empty(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{Items: []map[string]types.AttributeValue{}},
+		queryOutput: &dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}},
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
@@ -314,6 +326,18 @@ func TestCreateProject_Success(t *testing.T) {
 	if idAttr.(*types.AttributeValueMemberS).Value != "project#new-project" {
 		t.Errorf("expected id 'project#new-project', got '%s'", idAttr.(*types.AttributeValueMemberS).Value)
 	}
+	// Verify item_type is set for GSI
+	typeAttr, ok := mock.putInput.Item["item_type"]
+	if !ok {
+		t.Fatal("expected 'item_type' in put item")
+	}
+	if typeAttr.(*types.AttributeValueMemberS).Value != "project" {
+		t.Errorf("expected item_type 'project', got '%s'", typeAttr.(*types.AttributeValueMemberS).Value)
+	}
+	// Verify created_at is set
+	if _, ok := mock.putInput.Item["created_at"]; !ok {
+		t.Fatal("expected 'created_at' in put item")
+	}
 }
 
 func TestCreateProject_DynamoDBError(t *testing.T) {
@@ -384,21 +408,23 @@ func TestDeleteProject_DynamoDBError(t *testing.T) {
 
 func TestGetLinks_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{
+		queryOutput: &dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{
 				{
-					"id":    &types.AttributeValueMemberS{Value: "link#a1b2c3d4e5f6"},
-					"url":   &types.AttributeValueMemberS{Value: "https://go.dev/blog/"},
-					"title": &types.AttributeValueMemberS{Value: "The Go Blog"},
+					"id":        &types.AttributeValueMemberS{Value: "link#a1b2c3d4e5f6"},
+					"url":       &types.AttributeValueMemberS{Value: "https://go.dev/blog/"},
+					"title":     &types.AttributeValueMemberS{Value: "The Go Blog"},
+					"item_type": &types.AttributeValueMemberS{Value: "link"},
 					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
 						&types.AttributeValueMemberS{Value: "go"},
 						&types.AttributeValueMemberS{Value: "programming"},
 					}},
 				},
 				{
-					"id":    &types.AttributeValueMemberS{Value: "link#b2c3d4e5f6a1"},
-					"url":   &types.AttributeValueMemberS{Value: "https://aws.amazon.com/dynamodb/"},
-					"title": &types.AttributeValueMemberS{Value: "Amazon DynamoDB"},
+					"id":        &types.AttributeValueMemberS{Value: "link#b2c3d4e5f6a1"},
+					"url":       &types.AttributeValueMemberS{Value: "https://aws.amazon.com/dynamodb/"},
+					"title":     &types.AttributeValueMemberS{Value: "Amazon DynamoDB"},
+					"item_type": &types.AttributeValueMemberS{Value: "link"},
 					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
 						&types.AttributeValueMemberS{Value: "aws"},
 					}},
@@ -418,16 +444,23 @@ func TestGetLinks_Success(t *testing.T) {
 	if links[0].Title != "The Go Blog" {
 		t.Errorf("expected title 'The Go Blog', got '%s'", links[0].Title)
 	}
+	if mock.queryInput == nil {
+		t.Fatal("expected Query to be called")
+	}
+	if *mock.queryInput.IndexName != "item-type-index" {
+		t.Errorf("expected index 'item-type-index', got '%s'", *mock.queryInput.IndexName)
+	}
 }
 
 func TestGetLinks_FilterByTag(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{
+		queryOutput: &dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{
 				{
-					"id":    &types.AttributeValueMemberS{Value: "link#b2c3d4e5f6a1"},
-					"url":   &types.AttributeValueMemberS{Value: "https://aws.amazon.com/dynamodb/"},
-					"title": &types.AttributeValueMemberS{Value: "Amazon DynamoDB"},
+					"id":        &types.AttributeValueMemberS{Value: "link#b2c3d4e5f6a1"},
+					"url":       &types.AttributeValueMemberS{Value: "https://aws.amazon.com/dynamodb/"},
+					"title":     &types.AttributeValueMemberS{Value: "Amazon DynamoDB"},
+					"item_type": &types.AttributeValueMemberS{Value: "link"},
 					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
 						&types.AttributeValueMemberS{Value: "aws"},
 					}},
@@ -444,11 +477,11 @@ func TestGetLinks_FilterByTag(t *testing.T) {
 	if len(links) != 1 {
 		t.Fatalf("expected 1 link, got %d", len(links))
 	}
-	// Verify the scan input includes a contains filter for tags
-	if mock.scanInput == nil {
-		t.Fatal("expected Scan to be called")
+	// Verify Query with tag filter
+	if mock.queryInput == nil {
+		t.Fatal("expected Query to be called")
 	}
-	filterExpr := *mock.scanInput.FilterExpression
+	filterExpr := *mock.queryInput.FilterExpression
 	if !strings.Contains(filterExpr, "contains") {
 		t.Errorf("expected filter expression to contain 'contains', got '%s'", filterExpr)
 	}
@@ -456,7 +489,7 @@ func TestGetLinks_FilterByTag(t *testing.T) {
 
 func TestGetLinks_Empty(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{Items: []map[string]types.AttributeValue{}},
+		queryOutput: &dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}},
 	}
 
 	svc := NewBotService(mock, "josh-bot-data")
@@ -533,6 +566,14 @@ func TestCreateLink_Success(t *testing.T) {
 	if idVal != expectedID {
 		t.Errorf("expected id '%s', got '%s'", expectedID, idVal)
 	}
+	// Verify item_type is set for GSI
+	typeAttr, ok := mock.putInput.Item["item_type"]
+	if !ok {
+		t.Fatal("expected 'item_type' in put item")
+	}
+	if typeAttr.(*types.AttributeValueMemberS).Value != "link" {
+		t.Errorf("expected item_type 'link', got '%s'", typeAttr.(*types.AttributeValueMemberS).Value)
+	}
 }
 
 func TestCreateLink_DynamoDBError(t *testing.T) {
@@ -602,20 +643,22 @@ func TestDeleteLink_DynamoDBError(t *testing.T) {
 
 func TestGetNotes_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{
+		queryOutput: &dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{
 				{
-					"id":    &types.AttributeValueMemberS{Value: "note#abc123"},
-					"title": &types.AttributeValueMemberS{Value: "Meeting notes"},
-					"body":  &types.AttributeValueMemberS{Value: "Discussed API design"},
+					"id":        &types.AttributeValueMemberS{Value: "note#abc123"},
+					"title":     &types.AttributeValueMemberS{Value: "Meeting notes"},
+					"body":      &types.AttributeValueMemberS{Value: "Discussed API design"},
+					"item_type": &types.AttributeValueMemberS{Value: "note"},
 					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
 						&types.AttributeValueMemberS{Value: "work"},
 					}},
 				},
 				{
-					"id":    &types.AttributeValueMemberS{Value: "note#def456"},
-					"title": &types.AttributeValueMemberS{Value: "Grocery list"},
-					"body":  &types.AttributeValueMemberS{Value: "Eggs, milk, bread"},
+					"id":        &types.AttributeValueMemberS{Value: "note#def456"},
+					"title":     &types.AttributeValueMemberS{Value: "Grocery list"},
+					"body":      &types.AttributeValueMemberS{Value: "Eggs, milk, bread"},
+					"item_type": &types.AttributeValueMemberS{Value: "note"},
 					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
 						&types.AttributeValueMemberS{Value: "personal"},
 					}},
@@ -639,12 +682,13 @@ func TestGetNotes_Success(t *testing.T) {
 
 func TestGetNotes_FilterByTag(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{
+		queryOutput: &dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{
 				{
-					"id":    &types.AttributeValueMemberS{Value: "note#abc123"},
-					"title": &types.AttributeValueMemberS{Value: "Meeting notes"},
-					"body":  &types.AttributeValueMemberS{Value: "Discussed API design"},
+					"id":        &types.AttributeValueMemberS{Value: "note#abc123"},
+					"title":     &types.AttributeValueMemberS{Value: "Meeting notes"},
+					"body":      &types.AttributeValueMemberS{Value: "Discussed API design"},
+					"item_type": &types.AttributeValueMemberS{Value: "note"},
 					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
 						&types.AttributeValueMemberS{Value: "work"},
 					}},
@@ -661,10 +705,10 @@ func TestGetNotes_FilterByTag(t *testing.T) {
 	if len(notes) != 1 {
 		t.Fatalf("expected 1 note, got %d", len(notes))
 	}
-	if mock.scanInput == nil {
-		t.Fatal("expected Scan to be called")
+	if mock.queryInput == nil {
+		t.Fatal("expected Query to be called")
 	}
-	filterExpr := *mock.scanInput.FilterExpression
+	filterExpr := *mock.queryInput.FilterExpression
 	if !strings.Contains(filterExpr, "contains") {
 		t.Errorf("expected filter expression to contain 'contains', got '%s'", filterExpr)
 	}
@@ -731,6 +775,14 @@ func TestCreateNote_Success(t *testing.T) {
 	idVal := idAttr.(*types.AttributeValueMemberS).Value
 	if !strings.HasPrefix(idVal, "note#") {
 		t.Errorf("expected id to start with 'note#', got '%s'", idVal)
+	}
+	// Verify item_type is set for GSI
+	typeAttr, ok := mock.putInput.Item["item_type"]
+	if !ok {
+		t.Fatal("expected 'item_type' in put item")
+	}
+	if typeAttr.(*types.AttributeValueMemberS).Value != "note" {
+		t.Errorf("expected item_type 'note', got '%s'", typeAttr.(*types.AttributeValueMemberS).Value)
 	}
 }
 
@@ -801,12 +853,13 @@ func TestDeleteNote_DynamoDBError(t *testing.T) {
 
 func TestGetTILs_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{
+		queryOutput: &dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{
 				{
-					"id":    &types.AttributeValueMemberS{Value: "til#abc123"},
-					"title": &types.AttributeValueMemberS{Value: "Go slices grow by 2x"},
-					"body":  &types.AttributeValueMemberS{Value: "When a slice exceeds capacity, Go doubles it"},
+					"id":        &types.AttributeValueMemberS{Value: "til#abc123"},
+					"title":     &types.AttributeValueMemberS{Value: "Go slices grow by 2x"},
+					"body":      &types.AttributeValueMemberS{Value: "When a slice exceeds capacity, Go doubles it"},
+					"item_type": &types.AttributeValueMemberS{Value: "til"},
 					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
 						&types.AttributeValueMemberS{Value: "go"},
 					}},
@@ -830,12 +883,13 @@ func TestGetTILs_Success(t *testing.T) {
 
 func TestGetTILs_FilterByTag(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{
+		queryOutput: &dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{
 				{
-					"id":    &types.AttributeValueMemberS{Value: "til#abc123"},
-					"title": &types.AttributeValueMemberS{Value: "Go slices grow by 2x"},
-					"body":  &types.AttributeValueMemberS{Value: "Capacity doubles"},
+					"id":        &types.AttributeValueMemberS{Value: "til#abc123"},
+					"title":     &types.AttributeValueMemberS{Value: "Go slices grow by 2x"},
+					"body":      &types.AttributeValueMemberS{Value: "Capacity doubles"},
+					"item_type": &types.AttributeValueMemberS{Value: "til"},
 					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
 						&types.AttributeValueMemberS{Value: "go"},
 					}},
@@ -852,10 +906,10 @@ func TestGetTILs_FilterByTag(t *testing.T) {
 	if len(tils) != 1 {
 		t.Fatalf("expected 1 til, got %d", len(tils))
 	}
-	if mock.scanInput == nil {
-		t.Fatal("expected Scan to be called")
+	if mock.queryInput == nil {
+		t.Fatal("expected Query to be called")
 	}
-	filterExpr := *mock.scanInput.FilterExpression
+	filterExpr := *mock.queryInput.FilterExpression
 	if !strings.Contains(filterExpr, "contains") {
 		t.Errorf("expected filter expression to contain 'contains', got '%s'", filterExpr)
 	}
@@ -916,6 +970,14 @@ func TestCreateTIL_Success(t *testing.T) {
 	idVal := idAttr.(*types.AttributeValueMemberS).Value
 	if !strings.HasPrefix(idVal, "til#") {
 		t.Errorf("expected id to start with 'til#', got '%s'", idVal)
+	}
+	// Verify item_type is set for GSI
+	typeAttr, ok := mock.putInput.Item["item_type"]
+	if !ok {
+		t.Fatal("expected 'item_type' in put item")
+	}
+	if typeAttr.(*types.AttributeValueMemberS).Value != "til" {
+		t.Errorf("expected item_type 'til', got '%s'", typeAttr.(*types.AttributeValueMemberS).Value)
 	}
 }
 
@@ -986,18 +1048,20 @@ func TestDeleteTIL_DynamoDBError(t *testing.T) {
 
 func TestGetLogEntries_Success(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{
+		queryOutput: &dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{
 				{
-					"id":      &types.AttributeValueMemberS{Value: "log#abc123"},
-					"message": &types.AttributeValueMemberS{Value: "deployed josh-bot v1.2"},
+					"id":        &types.AttributeValueMemberS{Value: "log#abc123"},
+					"message":   &types.AttributeValueMemberS{Value: "deployed josh-bot v1.2"},
+					"item_type": &types.AttributeValueMemberS{Value: "log"},
 					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
 						&types.AttributeValueMemberS{Value: "deploy"},
 					}},
 				},
 				{
-					"id":      &types.AttributeValueMemberS{Value: "log#def456"},
-					"message": &types.AttributeValueMemberS{Value: "updated DNS for josh.bot"},
+					"id":        &types.AttributeValueMemberS{Value: "log#def456"},
+					"message":   &types.AttributeValueMemberS{Value: "updated DNS for josh.bot"},
+					"item_type": &types.AttributeValueMemberS{Value: "log"},
 					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
 						&types.AttributeValueMemberS{Value: "infra"},
 					}},
@@ -1021,11 +1085,12 @@ func TestGetLogEntries_Success(t *testing.T) {
 
 func TestGetLogEntries_FilterByTag(t *testing.T) {
 	mock := &mockDynamoDBClient{
-		scanOutput: &dynamodb.ScanOutput{
+		queryOutput: &dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{
 				{
-					"id":      &types.AttributeValueMemberS{Value: "log#abc123"},
-					"message": &types.AttributeValueMemberS{Value: "deployed josh-bot v1.2"},
+					"id":        &types.AttributeValueMemberS{Value: "log#abc123"},
+					"message":   &types.AttributeValueMemberS{Value: "deployed josh-bot v1.2"},
+					"item_type": &types.AttributeValueMemberS{Value: "log"},
 					"tags": &types.AttributeValueMemberL{Value: []types.AttributeValue{
 						&types.AttributeValueMemberS{Value: "deploy"},
 					}},
@@ -1042,10 +1107,10 @@ func TestGetLogEntries_FilterByTag(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
-	if mock.scanInput == nil {
-		t.Fatal("expected Scan to be called")
+	if mock.queryInput == nil {
+		t.Fatal("expected Query to be called")
 	}
-	filterExpr := *mock.scanInput.FilterExpression
+	filterExpr := *mock.queryInput.FilterExpression
 	if !strings.Contains(filterExpr, "contains") {
 		t.Errorf("expected filter expression to contain 'contains', got '%s'", filterExpr)
 	}
@@ -1104,6 +1169,14 @@ func TestCreateLogEntry_Success(t *testing.T) {
 	idVal := idAttr.(*types.AttributeValueMemberS).Value
 	if !strings.HasPrefix(idVal, "log#") {
 		t.Errorf("expected id to start with 'log#', got '%s'", idVal)
+	}
+	// Verify item_type is set for GSI
+	typeAttr, ok := mock.putInput.Item["item_type"]
+	if !ok {
+		t.Fatal("expected 'item_type' in put item")
+	}
+	if typeAttr.(*types.AttributeValueMemberS).Value != "log" {
+		t.Errorf("expected item_type 'log', got '%s'", typeAttr.(*types.AttributeValueMemberS).Value)
 	}
 }
 
@@ -1207,6 +1280,15 @@ func TestCreateDiaryEntry_SetsCreatedAtWhenEmpty(t *testing.T) {
 	updatedAtVal := updatedAtAttr.(*types.AttributeValueMemberS).Value
 	if updatedAtVal == "" {
 		t.Error("expected updated_at to be non-empty")
+	}
+
+	// Verify item_type is set for GSI
+	typeAttr, ok := mock.putInput.Item["item_type"]
+	if !ok {
+		t.Fatal("expected 'item_type' in put item")
+	}
+	if typeAttr.(*types.AttributeValueMemberS).Value != "diary" {
+		t.Errorf("expected item_type 'diary', got '%s'", typeAttr.(*types.AttributeValueMemberS).Value)
 	}
 }
 

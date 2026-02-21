@@ -42,6 +42,7 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
         Effect = "Allow"
         Resource = [
           aws_dynamodb_table.josh_bot_data.arn,
+          "${aws_dynamodb_table.josh_bot_data.arn}/index/*",
           aws_dynamodb_table.josh_bot_lifts.arn,
           aws_dynamodb_table.josh_bot_mem.arn,
           "${aws_dynamodb_table.josh_bot_mem.arn}/index/*",

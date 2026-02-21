@@ -34,6 +34,7 @@ type Project struct {
 	Description string `json:"description" dynamodbav:"description"`
 	URL         string `json:"url" dynamodbav:"url"`
 	Status      string `json:"status" dynamodbav:"status"`
+	CreatedAt   string `json:"created_at,omitempty" dynamodbav:"created_at,omitempty"`
 	UpdatedAt   string `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
 }
 

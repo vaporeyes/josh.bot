@@ -79,6 +79,24 @@ resource "aws_dynamodb_table" "josh_bot_data" {
     type = "S"
   }
 
+  attribute {
+    name = "item_type"
+    type = "S"
+  }
+
+  attribute {
+    name = "created_at"
+    type = "S"
+  }
+
+  # AIDEV-NOTE: GSI enables Query-based list operations instead of full table Scans.
+  global_secondary_index {
+    name            = "item-type-index"
+    hash_key        = "item_type"
+    range_key       = "created_at"
+    projection_type = "ALL"
+  }
+
   # AIDEV-NOTE: TTL enables automatic cleanup of idempotency records (idem# prefix, 24h expiry).
   ttl {
     attribute_name = "expires_at"
