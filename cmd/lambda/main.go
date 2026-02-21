@@ -10,9 +10,11 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	dynamodbadapter "github.com/jduncan/josh-bot/internal/adapters/dynamodb"
 	ghclient "github.com/jduncan/josh-bot/internal/adapters/github"
 	lambdaadapter "github.com/jduncan/josh-bot/internal/adapters/lambda"
+	sqsadapter "github.com/jduncan/josh-bot/internal/adapters/sqs"
 	diarysvc "github.com/jduncan/josh-bot/internal/service"
 )
 
@@ -52,6 +54,15 @@ func main() {
 	webhookSecret := os.Getenv("WEBHOOK_SECRET")
 	webhookService := dynamodbadapter.NewWebhookService(client, tableName)
 	adapter.SetWebhookService(webhookService, webhookSecret)
+
+	// Wire up SQS publisher for async webhook processing
+	// AIDEV-NOTE: WEBHOOK_QUEUE_URL is set by Terraform when the SQS queue exists.
+	webhookQueueURL := os.Getenv("WEBHOOK_QUEUE_URL")
+	if webhookQueueURL != "" {
+		sqsClient := awssqs.NewFromConfig(cfg)
+		publisher := sqsadapter.NewPublisher(sqsClient, webhookQueueURL)
+		adapter.SetWebhookPublisher(publisher)
+	}
 
 	// Wire up diary service with GitHub publishing if configured
 	ghToken := os.Getenv("GITHUB_TOKEN")

@@ -36,10 +36,17 @@ jobs:
       - name: Run tests
         run: go test ./...
 
-      - name: Build Go Binary
+      - name: Build API Lambda
         run: |
           GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap cmd/lambda/main.go
           zip terraform/function.zip bootstrap
+          rm bootstrap
+
+      - name: Build Webhook Processor Lambda
+        run: |
+          GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap cmd/webhook-processor/main.go
+          zip terraform/webhook-processor.zip bootstrap
+          rm bootstrap
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -64,11 +71,17 @@ jobs:
         with:
           go-version: "1.24"
 
-      - name: Build Go Binary
+      - name: Build API Lambda
         run: |
-          # Use GOOS=linux and GOARCH=arm64 for AWS Lambda (AL2023)
           GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap cmd/lambda/main.go
           zip terraform/function.zip bootstrap
+          rm bootstrap
+
+      - name: Build Webhook Processor Lambda
+        run: |
+          GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap cmd/webhook-processor/main.go
+          zip terraform/webhook-processor.zip bootstrap
+          rm bootstrap
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4

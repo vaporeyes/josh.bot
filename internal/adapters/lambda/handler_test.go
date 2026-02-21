@@ -5,6 +5,7 @@ package lambda
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -629,7 +630,7 @@ func TestRouter_DeleteDiaryEntry_Success(t *testing.T) {
 
 // --- Webhook Tests ---
 
-// newWebhookAdapter creates an adapter with webhook service wired up.
+// newWebhookAdapter creates an adapter with webhook service wired up (for GET tests).
 func newWebhookAdapter(t *testing.T) *Adapter {
 	t.Helper()
 	t.Setenv("API_KEY", "key")
@@ -638,8 +639,19 @@ func newWebhookAdapter(t *testing.T) *Adapter {
 	return adapter
 }
 
+// newWebhookAdapterWithPublisher creates an adapter with both webhook service and publisher (for POST tests).
+func newWebhookAdapterWithPublisher(t *testing.T) (*Adapter, *mock.WebhookPublisher) {
+	t.Helper()
+	t.Setenv("API_KEY", "key")
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService(), mock.NewMemService())
+	adapter.SetWebhookService(mock.NewWebhookService(), "test-webhook-secret")
+	pub := mock.NewWebhookPublisher()
+	adapter.SetWebhookPublisher(pub)
+	return adapter, pub
+}
+
 func TestRouter_PostWebhook_ValidSignature(t *testing.T) {
-	adapter := newWebhookAdapter(t)
+	adapter, pub := newWebhookAdapterWithPublisher(t)
 	body := `{"type":"message","source":"k8-one","payload":{"text":"hello"}}`
 	sig := "sha256=" + domain.ComputeWebhookSignature(body, "test-webhook-secret")
 
@@ -654,8 +666,14 @@ func TestRouter_PostWebhook_ValidSignature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resp.StatusCode != 201 {
-		t.Errorf("expected 201, got %d: %s", resp.StatusCode, resp.Body)
+	if resp.StatusCode != 202 {
+		t.Errorf("expected 202, got %d: %s", resp.StatusCode, resp.Body)
+	}
+	if len(pub.Published) != 1 {
+		t.Fatalf("expected 1 published event, got %d", len(pub.Published))
+	}
+	if pub.Published[0].Type != "message" {
+		t.Errorf("expected type 'message', got '%s'", pub.Published[0].Type)
 	}
 }
 
@@ -880,7 +898,7 @@ func TestRouter_DeleteWebhook_MethodNotAllowed(t *testing.T) {
 }
 
 func TestRouter_PostWebhook_CORSHeaders(t *testing.T) {
-	adapter := newWebhookAdapter(t)
+	adapter, _ := newWebhookAdapterWithPublisher(t)
 	body := `{"type":"message","source":"k8-one","payload":{"text":"hello"}}`
 	sig := "sha256=" + domain.ComputeWebhookSignature(body, "test-webhook-secret")
 
@@ -901,22 +919,8 @@ func TestRouter_PostWebhook_CORSHeaders(t *testing.T) {
 	}
 }
 
-// capturingWebhookService records the event passed to CreateWebhookEvent.
-type capturingWebhookService struct {
-	mock.WebhookService
-	captured domain.WebhookEvent
-}
-
-func (s *capturingWebhookService) CreateWebhookEvent(_ context.Context, event domain.WebhookEvent) error {
-	s.captured = event
-	return nil
-}
-
 func TestRouter_PostWebhook_LargeNumberPrecision(t *testing.T) {
-	t.Setenv("API_KEY", "key")
-	capture := &capturingWebhookService{}
-	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService(), mock.NewMemService())
-	adapter.SetWebhookService(capture, "test-webhook-secret")
+	adapter, pub := newWebhookAdapterWithPublisher(t)
 
 	body := `{"type":"message","source":"test","payload":{"big_id":1234567890123456789}}`
 	sig := "sha256=" + domain.ComputeWebhookSignature(body, "test-webhook-secret")
@@ -932,14 +936,65 @@ func TestRouter_PostWebhook_LargeNumberPrecision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resp.StatusCode != 201 {
-		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, resp.Body)
+	if resp.StatusCode != 202 {
+		t.Fatalf("expected 202, got %d: %s", resp.StatusCode, resp.Body)
 	}
 
-	val := capture.captured.Payload["big_id"]
+	if len(pub.Published) != 1 {
+		t.Fatalf("expected 1 published event, got %d", len(pub.Published))
+	}
+	val := pub.Published[0].Payload["big_id"]
 	// With UseNumber(), this should be json.Number, not float64
 	if _, ok := val.(json.Number); !ok {
 		t.Errorf("expected json.Number for big_id, got %T (%v)", val, val)
+	}
+}
+
+func TestRouter_PostWebhook_PublisherError_Returns500(t *testing.T) {
+	adapter, pub := newWebhookAdapterWithPublisher(t)
+	pub.Err = errors.New("SQS send failed")
+
+	body := `{"type":"message","source":"k8-one","payload":{"text":"hello"}}`
+	sig := "sha256=" + domain.ComputeWebhookSignature(body, "test-webhook-secret")
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/webhooks",
+		Headers:    map[string]string{"x-webhook-signature": sig},
+		Body:       body,
+	}
+
+	resp, err := adapter.Router(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 500 {
+		t.Errorf("expected 500, got %d: %s", resp.StatusCode, resp.Body)
+	}
+}
+
+func TestRouter_PostWebhook_NoPublisherConfigured_Returns500(t *testing.T) {
+	t.Setenv("API_KEY", "key")
+	adapter := NewAdapter(mock.NewBotService(), mock.NewMetricsService(), mock.NewMemService())
+	adapter.SetWebhookService(mock.NewWebhookService(), "test-webhook-secret")
+	// No publisher set
+
+	body := `{"type":"message","source":"k8-one","payload":{"text":"hello"}}`
+	sig := "sha256=" + domain.ComputeWebhookSignature(body, "test-webhook-secret")
+
+	req := events.APIGatewayProxyRequest{
+		HTTPMethod: "POST",
+		Path:       "/v1/webhooks",
+		Headers:    map[string]string{"x-webhook-signature": sig},
+		Body:       body,
+	}
+
+	resp, err := adapter.Router(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 500 {
+		t.Errorf("expected 500 when no publisher configured, got %d: %s", resp.StatusCode, resp.Body)
 	}
 }
 

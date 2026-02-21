@@ -84,6 +84,7 @@ Thumbs.db
 
 # ignore the artifact
 terraform/function.zip
+terraform/webhook-processor.zip
 
 # bins that could be built
 sync-mem

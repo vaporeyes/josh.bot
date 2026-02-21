@@ -13,15 +13,34 @@ resource "aws_lambda_function" "josh_bot_api" {
 
   environment {
     variables = {
-      APP_ENV          = "production"
-      API_KEY          = random_password.api_key.result
-      TABLE_NAME       = aws_dynamodb_table.josh_bot_data.name
-      LIFTS_TABLE_NAME = aws_dynamodb_table.josh_bot_lifts.name
-      MEM_TABLE_NAME   = aws_dynamodb_table.josh_bot_mem.name
-      GITHUB_TOKEN     = var.github_token
-      DIARY_REPO_OWNER = var.diary_repo_owner
-      DIARY_REPO_NAME  = var.diary_repo_name
-      WEBHOOK_SECRET   = var.webhook_secret
+      APP_ENV           = "production"
+      API_KEY           = random_password.api_key.result
+      TABLE_NAME        = aws_dynamodb_table.josh_bot_data.name
+      LIFTS_TABLE_NAME  = aws_dynamodb_table.josh_bot_lifts.name
+      MEM_TABLE_NAME    = aws_dynamodb_table.josh_bot_mem.name
+      GITHUB_TOKEN      = var.github_token
+      DIARY_REPO_OWNER  = var.diary_repo_owner
+      DIARY_REPO_NAME   = var.diary_repo_name
+      WEBHOOK_SECRET    = var.webhook_secret
+      WEBHOOK_QUEUE_URL = aws_sqs_queue.webhook_queue.url
+    }
+  }
+}
+
+# Webhook processor Lambda (reads from SQS, writes to DynamoDB)
+resource "aws_lambda_function" "webhook_processor" {
+  filename         = "webhook-processor.zip"
+  source_code_hash = filebase64sha256("webhook-processor.zip")
+  function_name    = "josh-bot-webhook-processor"
+  role             = aws_iam_role.webhook_processor_exec.arn
+  handler          = "bootstrap"
+  runtime          = "provided.al2023"
+  architectures    = ["arm64"]
+
+  environment {
+    variables = {
+      APP_ENV    = "production"
+      TABLE_NAME = aws_dynamodb_table.josh_bot_data.name
     }
   }
 }

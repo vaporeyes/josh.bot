@@ -32,12 +32,13 @@ func errorResponse(err error) (events.APIGatewayProxyResponse, error) {
 
 // Adapter wraps domain services and handles Lambda API Gateway events.
 type Adapter struct {
-	service        domain.BotService
-	metricsService domain.MetricsService
-	memService     domain.MemService
-	diaryService   domain.DiaryService
-	webhookService domain.WebhookService
-	webhookSecret  string
+	service          domain.BotService
+	metricsService   domain.MetricsService
+	memService       domain.MemService
+	diaryService     domain.DiaryService
+	webhookService   domain.WebhookService
+	webhookPublisher domain.WebhookPublisher
+	webhookSecret    string
 }
 
 // NewAdapter creates a new Lambda adapter for the given services.
@@ -56,6 +57,12 @@ func (a *Adapter) SetDiaryService(ds domain.DiaryService) {
 func (a *Adapter) SetWebhookService(ws domain.WebhookService, secret string) {
 	a.webhookService = ws
 	a.webhookSecret = secret
+}
+
+// SetWebhookPublisher sets the publisher for async webhook event processing.
+// AIDEV-NOTE: When set, POST /v1/webhooks publishes to queue instead of writing to DynamoDB directly.
+func (a *Adapter) SetWebhookPublisher(p domain.WebhookPublisher) {
+	a.webhookPublisher = p
 }
 
 // isPublicRoute returns true for routes that don't require API key auth.
@@ -861,10 +868,17 @@ func (a *Adapter) handleWebhooks(ctx context.Context, req events.APIGatewayProxy
 		if err := dec.Decode(&event); err != nil {
 			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
 		}
-		if err := a.webhookService.CreateWebhookEvent(ctx, event); err != nil {
-			return jsonResponse(500, `{"error":"internal server error"}`), err
+
+		// AIDEV-NOTE: Publish to async queue instead of writing to DynamoDB directly.
+		if a.webhookPublisher == nil {
+			slog.ErrorContext(ctx, "webhook publisher not configured")
+			return jsonResponse(500, `{"error":"webhook publisher not configured"}`), nil
 		}
-		return jsonResponse(201, `{"ok":true}`), nil
+		if err := a.webhookPublisher.Publish(ctx, event); err != nil {
+			slog.ErrorContext(ctx, "failed to publish webhook event", "error", err)
+			return jsonResponse(500, `{"error":"internal server error"}`), nil
+		}
+		return jsonResponse(202, `{"ok":true}`), nil
 
 	default:
 		return jsonResponse(405, `{"error":"method not allowed"}`), nil

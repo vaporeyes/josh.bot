@@ -8,22 +8,75 @@ Built with **Hexagonal Architecture** (Ports and Adapters) in Go. The core domai
 
 ```
 cmd/
-  api/            Local dev server (mock data, no auth)
-  lambda/         Production entrypoint (DynamoDB, API key auth)
-  import-lifts/   CLI tool for importing Strong app workout CSV exports
-  export-links/   CLI tool for exporting links with tag/date filters (JSON or URL-only)
-  sync-mem/       CLI tool for syncing claude-mem SQLite to DynamoDB
+  api/                  Local dev server (mock data, no auth)
+  lambda/               Production entrypoint (DynamoDB, API key auth)
+  webhook-processor/    SQS-triggered Lambda for async webhook event storage
+  import-lifts/         CLI tool for importing Strong app workout CSV exports
+  export-links/         CLI tool for exporting links with tag/date filters (JSON or URL-only)
+  sync-mem/             CLI tool for syncing claude-mem SQLite to DynamoDB
 internal/
-  domain/         Core types, service interfaces, validation, and custom errors
-  service/        Orchestrators (diary: DynamoDB + GitHub publish)
+  domain/               Core types, service interfaces, validation, and custom errors
+  service/              Orchestrators (diary: DynamoDB + GitHub publish)
   adapters/
-    dynamodb/     DynamoDB-backed service implementation
-    github/       GitHub Contents API client (diary → Obsidian publish)
-    lambda/       API Gateway event routing with structured logging
-    http/         HTTP handlers for local dev
-    mock/         In-memory service for testing
-scripts/          Seed scripts, send-webhook CLI
-terraform/        Infrastructure as code
+    dynamodb/           DynamoDB-backed service implementation
+    github/             GitHub Contents API client (diary → Obsidian publish)
+    lambda/             API Gateway event routing with structured logging
+    sqs/                SQS publisher for async webhook processing
+    sqsprocessor/       SQS consumer that writes webhook events to DynamoDB
+    http/               HTTP handlers for local dev
+    mock/               In-memory service for testing
+scripts/                Seed scripts, send-webhook CLI
+terraform/              Infrastructure as code
+```
+
+### System Diagram
+
+```mermaid
+graph LR
+    subgraph Clients
+        K8["k8-one (Slack Bot)"]
+        CLI["CLI / curl"]
+        Bots["Other Bots"]
+    end
+
+    subgraph AWS
+        APIGW["API Gateway\n(HTTP API)"]
+
+        subgraph "API Lambda"
+            Router["Router\n(auth + routing)"]
+            Publisher["SQS Publisher"]
+        end
+
+        subgraph "Async Webhook Pipeline"
+            SQS["SQS Queue"]
+            DLQ["Dead Letter Queue\n(3 retries, 14d)"]
+            Processor["Webhook Processor\nLambda"]
+        end
+
+        DDB["DynamoDB\n(josh-bot-data)"]
+        DDB_Lifts["DynamoDB\n(josh-bot-lifts)"]
+        DDB_Mem["DynamoDB\n(josh-bot-mem)"]
+    end
+
+    subgraph External
+        GH["GitHub API\n(Obsidian publish)"]
+    end
+
+    K8 -->|"HMAC-signed POST"| APIGW
+    CLI -->|"API key"| APIGW
+    Bots -->|"HMAC-signed POST"| APIGW
+    APIGW --> Router
+
+    Router -->|"GET/POST/PUT/DELETE"| DDB
+    Router -->|"GET /metrics"| DDB_Lifts
+    Router -->|"GET /mem/*"| DDB_Mem
+    Router -->|"POST /diary"| GH
+
+    Router -->|"POST /webhooks (202)"| Publisher
+    Publisher -->|"SendMessage"| SQS
+    SQS -->|"trigger"| Processor
+    SQS -->|"after 3 failures"| DLQ
+    Processor -->|"PutItem"| DDB
 ```
 
 ### Data Model
@@ -384,11 +437,11 @@ curl -X DELETE https://api.josh.bot/v1/diary/a1b2c3d4e5f6a1b2 \
 
 ### Webhooks (Bot-to-Bot Communication)
 
-Inbound webhook events from other bots. Events are immutable once received (append-only log). POST uses HMAC-SHA256 signature authentication; GET uses normal API key auth.
+Inbound webhook events from other bots. Events are processed asynchronously: POST validates the HMAC signature and enqueues the event to SQS (returns 202), then a separate processor Lambda writes it to DynamoDB. Events are immutable once stored (append-only log). POST uses HMAC-SHA256 signature authentication; GET uses normal API key auth.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/v1/webhooks` | HMAC signature | Receive an inbound webhook event |
+| POST | `/v1/webhooks` | HMAC signature | Accept an inbound webhook event (async, returns 202) |
 | GET | `/v1/webhooks` | API key | List events (optional `?type=` and `?source=` filters) |
 | GET | `/v1/webhooks/{id}` | API key | Get a single event |
 
@@ -426,7 +479,9 @@ curl -H "x-api-key: <key>" https://api.josh.bot/v1/webhooks/a1b2c3d4e5f6a1b2
 }
 ```
 
-**Environment variables:** `WEBHOOK_SECRET` must be set for POST to work. If unset, all webhook POST requests are rejected (fail-closed).
+**Async processing flow:** POST validates the HMAC signature, then publishes the event to an SQS queue and returns 202 immediately. A separate `josh-bot-webhook-processor` Lambda reads from the queue and writes events to DynamoDB. Failed records are retried up to 3 times before landing in a dead letter queue (14-day retention). Only failed records in a batch are retried (partial batch failure via `ReportBatchItemFailures`).
+
+**Environment variables:** `WEBHOOK_SECRET` must be set for POST to work. If unset, all webhook POST requests are rejected (fail-closed). `WEBHOOK_QUEUE_URL` must be set for async processing; if unset, webhook POST returns 500.
 
 ### Development Memory (claude-mem)
 
@@ -531,14 +586,17 @@ Managed with Terraform in the `terraform/` directory:
 
 | Resource | Purpose |
 |----------|---------|
-| **AWS Lambda** (`provided.al2023`, ARM64) | Runs the Go API |
-| **API Gateway** (HTTP API) | Routes requests to Lambda (10 rps / 20 burst rate limit, default endpoint disabled) |
+| **AWS Lambda** `josh-bot-api` (`provided.al2023`, ARM64) | Runs the Go API, publishes webhook events to SQS |
+| **AWS Lambda** `josh-bot-webhook-processor` (`provided.al2023`, ARM64) | Reads webhook events from SQS, writes to DynamoDB |
+| **API Gateway** (HTTP API) | Routes requests to API Lambda (10 rps / 20 burst rate limit, default endpoint disabled) |
+| **SQS** `josh-bot-webhook-queue` | Async webhook event processing queue (redrive to DLQ after 3 failures) |
+| **SQS** `josh-bot-webhook-dlq` | Dead letter queue for failed webhook processing (14-day retention) |
 | **DynamoDB** `josh-bot-data` (PAY_PER_REQUEST) | Single-table store for status, projects, links, notes, TILs, log entries. `item-type-index` GSI for per-type queries. TTL on `expires_at` for idempotency record cleanup |
 | **DynamoDB** `josh-bot-lifts` (PAY_PER_REQUEST) | Workout/lift data with `date-index` GSI |
 | **DynamoDB** `josh-bot-mem` (PAY_PER_REQUEST) | Claude-mem data (observations, summaries, prompts) with `type-index` GSI |
 | **ACM** | TLS certificate for `api.josh.bot` (DNS validation + CNAME managed in Cloudflare) |
 | **SSM Parameter Store** | Stores the generated API key |
-| **IAM** | Lambda execution role with scoped DynamoDB permissions |
+| **IAM** | Separate roles for API Lambda and webhook processor (least privilege) |
 | **S3** | Terraform state backend with native locking |
 
 ## CI/CD
@@ -546,7 +604,7 @@ Managed with Terraform in the `terraform/` directory:
 Defined in `.github/workflows/cicd.yaml`, triggered on push to `main`:
 
 1. **Check job** -- gofmt, go vet, golangci-lint, go test, terraform fmt, terraform validate
-2. **Build and Deploy job** (requires check to pass) -- builds the Lambda binary, authenticates via OIDC, and runs `terraform apply`
+2. **Build and Deploy job** (requires check to pass) -- builds both Lambda binaries (API + webhook processor), authenticates via OIDC, and runs `terraform apply`
 
 Required GitHub secrets: `AWS_ACCOUNT_ID`, `TERRAFORM_BUCKET`
 
