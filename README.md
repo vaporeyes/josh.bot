@@ -14,13 +14,15 @@ cmd/
   export-links/   CLI tool for exporting links with tag/date filters (JSON or URL-only)
   sync-mem/       CLI tool for syncing claude-mem SQLite to DynamoDB
 internal/
-  domain/         Core types, service interfaces, and calculation helpers
+  domain/         Core types, service interfaces, validation, and custom errors
+  service/        Orchestrators (diary: DynamoDB + GitHub publish)
   adapters/
     dynamodb/     DynamoDB-backed service implementation
-    lambda/       API Gateway event routing
+    github/       GitHub Contents API client (diary → Obsidian publish)
+    lambda/       API Gateway event routing with structured logging
     http/         HTTP handlers for local dev
     mock/         In-memory service for testing
-scripts/          Seed scripts and DynamoDB table creation
+scripts/          Seed scripts, send-webhook CLI
 terraform/        Infrastructure as code
 ```
 
@@ -472,6 +474,23 @@ go run cmd/export-links/main.go --tag=go
 go run cmd/export-links/main.go --since=2026-01-01
 ```
 
+#### send-webhook
+
+Send HMAC-signed webhook events to josh.bot for bot-to-bot communication.
+
+```bash
+# Send a simple instruction
+scripts/send-webhook "deploy the latest version"
+
+# Send with custom type and source
+scripts/send-webhook -t alert -s cron-bot "disk usage above 90%"
+
+# Send arbitrary JSON payload from stdin
+echo '{"action":"deploy","target":"prod"}' | scripts/send-webhook -p -t deploy
+```
+
+Requires `WEBHOOK_SECRET` env var. Optionally set `JOSH_BOT_API_URL` to override the target (defaults to `https://api.josh.bot`).
+
 #### sync-mem
 
 Sync claude-mem SQLite data to the `josh-bot-mem` DynamoDB table.
@@ -519,6 +538,10 @@ Required GitHub secrets: `AWS_ACCOUNT_ID`, `TERRAFORM_BUCKET`
 
 - **Pre-commit hooks**: `go-fmt`, `go-build`, `go-unit-tests`, `golangci-lint`, `terraform_fmt`, `terraform_validate`
 - **TDD**: All features built test-first with mocked DynamoDB client
+- **Context propagation**: Lambda runtime `context.Context` threaded through all service interfaces and DynamoDB calls
+- **Structured logging**: JSON-formatted `slog` output in Lambda with request/response logging (method, path, status, client IP)
+- **Custom error types**: `NotFoundError` and `ValidationError` with `errors.As` support for correct HTTP status mapping (404/400/500)
+- **Domain validation**: `Validate()` methods on all entity types enforce required fields at the domain layer
 - **Field allowlists**: Write endpoints only accept known fields, preventing arbitrary data injection
 - **API key auth**: All write endpoints (and most reads) require `x-api-key` header
 - **Rate limiting**: 10 requests/sec with 20 burst at the API Gateway stage level
