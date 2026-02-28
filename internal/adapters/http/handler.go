@@ -473,6 +473,88 @@ func (a *Adapter) DeleteLogEntryHandler(w http.ResponseWriter, r *http.Request) 
 	writeOK(w, http.StatusOK)
 }
 
+// BooksHandler handles GET /v1/books (list books).
+func (a *Adapter) BooksHandler(w http.ResponseWriter, r *http.Request) {
+	tag := r.URL.Query().Get("tag")
+	books, err := a.service.GetBooks(r.Context(), tag)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, books)
+}
+
+// CreateBookHandler handles POST /v1/books (create book).
+func (a *Adapter) CreateBookHandler(w http.ResponseWriter, r *http.Request) {
+	var book domain.Book
+	if err := json.NewDecoder(r.Body).Decode(&book); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.CreateBook(r.Context(), book); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusCreated)
+}
+
+// BookHandler handles GET /v1/books/{id}.
+func (a *Adapter) BookHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/books/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	book, err := a.service.GetBook(r.Context(), id)
+	if err != nil {
+		httpError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, book)
+}
+
+// UpdateBookHandler handles PUT /v1/books/{id}.
+func (a *Adapter) UpdateBookHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/books/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	var fields map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
+		http.Error(w, `{"error":"invalid JSON body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.UpdateBook(r.Context(), id, fields); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
+// DeleteBookHandler handles DELETE /v1/books/{id}.
+func (a *Adapter) DeleteBookHandler(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/v1/books/")
+	if id == "" {
+		http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := a.service.DeleteBook(r.Context(), id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeOK(w, http.StatusOK)
+}
+
 // DiaryEntriesHandler handles GET /v1/diary (list diary entries).
 func (a *Adapter) DiaryEntriesHandler(w http.ResponseWriter, r *http.Request) {
 	tag := r.URL.Query().Get("tag")

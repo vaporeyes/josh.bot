@@ -170,6 +170,11 @@ func (a *Adapter) Router(ctx context.Context, req events.APIGatewayProxyRequest)
 		resp, routeErr = a.handleMemPrompt(ctx, req, id)
 	case req.Path == "/v1/mem/stats":
 		resp, routeErr = a.handleMemStats(ctx, req)
+	case req.Path == "/v1/books":
+		resp, routeErr = a.handleBooks(ctx, req)
+	case strings.HasPrefix(req.Path, "/v1/books/"):
+		id := strings.TrimPrefix(req.Path, "/v1/books/")
+		resp, routeErr = a.handleBook(ctx, req, id)
 	case req.Path == "/v1/diary":
 		resp, routeErr = a.handleDiaryEntries(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/diary/"):
@@ -696,6 +701,71 @@ func (a *Adapter) handleMemStats(ctx context.Context, req events.APIGatewayProxy
 		return jsonResponse(500, `{"error":"internal server error"}`), err
 	}
 	return jsonResponse(200, string(body)), nil
+}
+
+// handleBooks routes GET (list) and POST (create) for /v1/books.
+func (a *Adapter) handleBooks(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		tag := req.QueryStringParameters["tag"]
+		books, err := a.service.GetBooks(ctx, tag)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		body, err := json.Marshal(books)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "POST":
+		var book domain.Book
+		if err := json.Unmarshal([]byte(req.Body), &book); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.service.CreateBook(ctx, book); err != nil {
+			return errorResponse(err)
+		}
+		return jsonResponse(201, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+}
+
+// handleBook routes GET, PUT, DELETE for /v1/books/{id}.
+func (a *Adapter) handleBook(ctx context.Context, req events.APIGatewayProxyRequest, id string) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "GET":
+		book, err := a.service.GetBook(ctx, id)
+		if err != nil {
+			return errorResponse(err)
+		}
+		body, err := json.Marshal(book)
+		if err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, string(body)), nil
+
+	case "PUT":
+		var fields map[string]any
+		if err := json.Unmarshal([]byte(req.Body), &fields); err != nil {
+			return jsonResponse(400, `{"error":"invalid JSON body"}`), nil
+		}
+		if err := a.service.UpdateBook(ctx, id, fields); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	case "DELETE":
+		if err := a.service.DeleteBook(ctx, id); err != nil {
+			return jsonResponse(500, `{"error":"internal server error"}`), err
+		}
+		return jsonResponse(200, `{"ok":true}`), nil
+
+	default:
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
 }
 
 // handleDiaryEntries routes GET (list) and POST (create) for /v1/diary.

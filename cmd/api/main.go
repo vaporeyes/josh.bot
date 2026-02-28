@@ -28,6 +28,8 @@ func main() {
 	mux.HandleFunc("/v1/notes", adapter.NotesHandler)
 	mux.HandleFunc("/v1/til", adapter.TILsHandler)
 	mux.HandleFunc("/v1/log", adapter.LogEntriesHandler)
+	mux.HandleFunc("/v1/books", adapter.BooksHandler)
+	mux.HandleFunc("/v1/books/", adapter.BookHandler)
 	mux.HandleFunc("/v1/diary", adapter.DiaryEntriesHandler)
 	mux.HandleFunc("/v1/diary/", adapter.DiaryEntryHandler)
 	mux.HandleFunc("/v1/mem/observations", adapter.MemObservationsHandler)

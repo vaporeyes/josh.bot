@@ -673,6 +673,124 @@ func (s *BotService) DeleteLogEntry(ctx context.Context, id string) error {
 	return s.softDelete(ctx, "log#"+id)
 }
 
+// allowedBookFields defines which book fields can be updated via PUT.
+var allowedBookFields = map[string]bool{
+	"title": true, "isbn": true, "author": true,
+	"status": true, "type": true, "tags": true,
+}
+
+// --- Book Operations ---
+
+// GetBooks fetches all books from DynamoDB, optionally filtered by tag.
+func (s *BotService) GetBooks(ctx context.Context, tag string) ([]domain.Book, error) {
+	indexName := itemTypeIndex
+	keyExpr := "item_type = :type"
+	exprValues := map[string]types.AttributeValue{
+		":type": &types.AttributeValueMemberS{Value: "book"},
+	}
+
+	filter := notDeletedFilter
+	if tag != "" {
+		filter += " AND contains(tags, :tag)"
+		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
+	}
+
+	items, err := s.queryAllPages(ctx, &dynamodb.QueryInput{
+		TableName:                 &s.tableName,
+		IndexName:                 &indexName,
+		KeyConditionExpression:    &keyExpr,
+		FilterExpression:          &filter,
+		ExpressionAttributeValues: exprValues,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("dynamodb Query: %w", err)
+	}
+
+	books := make([]domain.Book, 0, len(items))
+	for _, item := range items {
+		var b domain.Book
+		if err := attributevalue.UnmarshalMap(item, &b); err != nil {
+			return nil, fmt.Errorf("unmarshal book: %w", err)
+		}
+		books = append(books, b)
+	}
+
+	return books, nil
+}
+
+// GetBook fetches a single book by ID from DynamoDB.
+func (s *BotService) GetBook(ctx context.Context, id string) (domain.Book, error) {
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: &s.tableName,
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: "book#" + id},
+		},
+	})
+	if err != nil {
+		return domain.Book{}, fmt.Errorf("dynamodb GetItem: %w", err)
+	}
+	if output.Item == nil {
+		return domain.Book{}, &domain.NotFoundError{Resource: "book", ID: id}
+	}
+
+	var book domain.Book
+	if err := attributevalue.UnmarshalMap(output.Item, &book); err != nil {
+		return domain.Book{}, fmt.Errorf("unmarshal book: %w", err)
+	}
+	if book.DeletedAt != "" {
+		return domain.Book{}, &domain.NotFoundError{Resource: "book", ID: id}
+	}
+
+	return book, nil
+}
+
+// CreateBook adds a new book to DynamoDB with a generated random ID.
+func (s *BotService) CreateBook(ctx context.Context, book domain.Book) error {
+	if err := book.Validate(); err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	book.ID = domain.BookID()
+	book.CreatedAt = now
+	book.UpdatedAt = now
+
+	item, err := attributevalue.MarshalMap(book)
+	if err != nil {
+		return fmt.Errorf("marshal book: %w", err)
+	}
+	item["item_type"] = &types.AttributeValueMemberS{Value: "book"}
+
+	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: &s.tableName,
+		Item:      item,
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb PutItem: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateBook updates specific fields on a book in DynamoDB.
+func (s *BotService) UpdateBook(ctx context.Context, id string, fields map[string]any) error {
+	if len(fields) == 0 {
+		return fmt.Errorf("no fields provided for update")
+	}
+
+	for key := range fields {
+		if !allowedBookFields[key] {
+			return fmt.Errorf("field %q is not an updatable book field", key)
+		}
+	}
+
+	return s.updateItem(ctx, "book#"+id, fields)
+}
+
+// DeleteBook soft-deletes a book by setting deleted_at.
+func (s *BotService) DeleteBook(ctx context.Context, id string) error {
+	return s.softDelete(ctx, "book#"+id)
+}
+
 // allowedDiaryEntryFields defines which diary entry fields can be updated via PUT.
 var allowedDiaryEntryFields = map[string]bool{
 	"title": true, "context": true, "body": true,

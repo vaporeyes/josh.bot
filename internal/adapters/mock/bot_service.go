@@ -262,6 +262,54 @@ func (s *BotService) DeleteLogEntry(_ context.Context, id string) error {
 	return nil
 }
 
+// GetBooks returns hardcoded books, optionally filtered by tag.
+func (s *BotService) GetBooks(_ context.Context, tag string) ([]domain.Book, error) {
+	books := []domain.Book{
+		{ID: "book#abc123", Title: "Designing Data-Intensive Applications", Author: "Martin Kleppmann", ISBN: "978-1449373320", Status: "read", Type: "physical", Tags: []string{"engineering", "distributed-systems"}, CreatedAt: "2026-01-15T10:00:00Z"},
+		{ID: "book#def456", Title: "The Pragmatic Programmer", Author: "David Thomas, Andrew Hunt", ISBN: "978-0135957059", Status: "reading", Type: "digital", Tags: []string{"engineering", "career"}, CreatedAt: "2026-02-01T10:00:00Z"},
+	}
+	if tag == "" {
+		return books, nil
+	}
+	var filtered []domain.Book
+	for _, b := range books {
+		for _, t := range b.Tags {
+			if t == tag {
+				filtered = append(filtered, b)
+				break
+			}
+		}
+	}
+	return filtered, nil
+}
+
+// GetBook returns a hardcoded book by ID.
+func (s *BotService) GetBook(ctx context.Context, id string) (domain.Book, error) {
+	fullID := "book#" + id
+	books, _ := s.GetBooks(ctx, "")
+	for _, b := range books {
+		if b.ID == fullID {
+			return b, nil
+		}
+	}
+	return domain.Book{}, &domain.NotFoundError{Resource: "book", ID: id}
+}
+
+// CreateBook is a no-op in the mock adapter.
+func (s *BotService) CreateBook(_ context.Context, book domain.Book) error {
+	return nil
+}
+
+// UpdateBook is a no-op in the mock adapter.
+func (s *BotService) UpdateBook(_ context.Context, id string, fields map[string]any) error {
+	return nil
+}
+
+// DeleteBook is a no-op in the mock adapter.
+func (s *BotService) DeleteBook(_ context.Context, id string) error {
+	return nil
+}
+
 // GetDiaryEntries returns hardcoded diary entries, optionally filtered by tag.
 func (s *BotService) GetDiaryEntries(_ context.Context, tag string) ([]domain.DiaryEntry, error) {
 	entries := []domain.DiaryEntry{

@@ -152,6 +152,27 @@ func LiftID(date string, exerciseName string, setOrder string) string {
 	return fmt.Sprintf("lift#%s#%s#%s", CompactDate(date), ExerciseSlug(exerciseName), strings.ToLower(setOrder))
 }
 
+// Book represents a book being tracked for reading.
+type Book struct {
+	ID        string   `json:"id" dynamodbav:"id"`
+	Title     string   `json:"title" dynamodbav:"title"`
+	ISBN      string   `json:"isbn,omitempty" dynamodbav:"isbn,omitempty"`
+	Author    string   `json:"author,omitempty" dynamodbav:"author,omitempty"`
+	Status    string   `json:"status" dynamodbav:"status"`
+	Type      string   `json:"type" dynamodbav:"type"`
+	Tags      []string `json:"tags" dynamodbav:"tags"`
+	CreatedAt string   `json:"created_at" dynamodbav:"created_at"`
+	UpdatedAt string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
+	DeletedAt string   `json:"deleted_at,omitempty" dynamodbav:"deleted_at,omitempty"`
+}
+
+// BookID generates a random ID with a "book#" prefix.
+func BookID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return "book#" + hex.EncodeToString(b)
+}
+
 // DiaryEntry represents a structured journal entry with context, reaction, and takeaway.
 // AIDEV-NOTE: Four fields match the journaling spec: Context, Body, Reaction, Takeaway.
 type DiaryEntry struct {
@@ -241,6 +262,36 @@ func (le LogEntry) Validate() error {
 	return nil
 }
 
+// validBookStatuses defines the allowed reading statuses.
+var validBookStatuses = map[string]bool{
+	"read": true, "reading": true, "want to read": true,
+}
+
+// validBookTypes defines the allowed book types.
+var validBookTypes = map[string]bool{
+	"digital": true, "physical": true,
+}
+
+// Validate checks required fields on a Book.
+func (b Book) Validate() error {
+	if b.Title == "" {
+		return &ValidationError{Field: "title", Message: "cannot be empty"}
+	}
+	if b.Status == "" {
+		return &ValidationError{Field: "status", Message: "cannot be empty"}
+	}
+	if !validBookStatuses[b.Status] {
+		return &ValidationError{Field: "status", Message: "must be one of: read, reading, want to read"}
+	}
+	if b.Type == "" {
+		return &ValidationError{Field: "type", Message: "cannot be empty"}
+	}
+	if !validBookTypes[b.Type] {
+		return &ValidationError{Field: "type", Message: "must be one of: digital, physical"}
+	}
+	return nil
+}
+
 // Validate checks required fields on a DiaryEntry.
 func (de DiaryEntry) Validate() error {
 	if de.Body == "" {
@@ -278,6 +329,11 @@ type BotService interface {
 	CreateLogEntry(ctx context.Context, entry LogEntry) error
 	UpdateLogEntry(ctx context.Context, id string, fields map[string]any) error
 	DeleteLogEntry(ctx context.Context, id string) error
+	GetBooks(ctx context.Context, tag string) ([]Book, error)
+	GetBook(ctx context.Context, id string) (Book, error)
+	CreateBook(ctx context.Context, book Book) error
+	UpdateBook(ctx context.Context, id string, fields map[string]any) error
+	DeleteBook(ctx context.Context, id string) error
 	GetDiaryEntries(ctx context.Context, tag string) ([]DiaryEntry, error)
 	GetDiaryEntry(ctx context.Context, id string) (DiaryEntry, error)
 	CreateDiaryEntry(ctx context.Context, entry DiaryEntry) error
