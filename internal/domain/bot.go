@@ -160,6 +160,7 @@ type Book struct {
 	Author    string   `json:"author,omitempty" dynamodbav:"author,omitempty"`
 	Status    string   `json:"status" dynamodbav:"status"`
 	Type      string   `json:"type" dynamodbav:"type"`
+	DateRead  string   `json:"date_read,omitempty" dynamodbav:"date_read,omitempty"`
 	Tags      []string `json:"tags" dynamodbav:"tags"`
 	CreatedAt string   `json:"created_at" dynamodbav:"created_at"`
 	UpdatedAt string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
