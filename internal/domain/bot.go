@@ -154,17 +154,18 @@ func LiftID(date string, exerciseName string, setOrder string) string {
 
 // Book represents a book being tracked for reading.
 type Book struct {
-	ID        string   `json:"id" dynamodbav:"id"`
-	Title     string   `json:"title" dynamodbav:"title"`
-	ISBN      string   `json:"isbn,omitempty" dynamodbav:"isbn,omitempty"`
-	Author    string   `json:"author,omitempty" dynamodbav:"author,omitempty"`
-	Status    string   `json:"status" dynamodbav:"status"`
-	Type      string   `json:"type" dynamodbav:"type"`
-	DateRead  string   `json:"date_read,omitempty" dynamodbav:"date_read,omitempty"`
-	Tags      []string `json:"tags" dynamodbav:"tags"`
-	CreatedAt string   `json:"created_at" dynamodbav:"created_at"`
-	UpdatedAt string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
-	DeletedAt string   `json:"deleted_at,omitempty" dynamodbav:"deleted_at,omitempty"`
+	ID           string   `json:"id" dynamodbav:"id"`
+	Title        string   `json:"title" dynamodbav:"title"`
+	ISBN         string   `json:"isbn,omitempty" dynamodbav:"isbn,omitempty"`
+	Author       string   `json:"author,omitempty" dynamodbav:"author,omitempty"`
+	Status       string   `json:"status" dynamodbav:"status"`
+	Type         string   `json:"type" dynamodbav:"type"`
+	Tags         []string `json:"tags" dynamodbav:"tags"`
+	DateStarted  string   `json:"date_started,omitempty" dynamodbav:"date_started,omitempty"`
+	DateFinished string   `json:"date_finished,omitempty" dynamodbav:"date_finished,omitempty"`
+	CreatedAt    string   `json:"created_at" dynamodbav:"created_at"`
+	UpdatedAt    string   `json:"updated_at,omitempty" dynamodbav:"updated_at,omitempty"`
+	DeletedAt    string   `json:"deleted_at,omitempty" dynamodbav:"deleted_at,omitempty"`
 }
 
 // BookID generates a random ID with a "book#" prefix.

@@ -265,8 +265,8 @@ func (s *BotService) DeleteLogEntry(_ context.Context, id string) error {
 // GetBooks returns hardcoded books, optionally filtered by tag.
 func (s *BotService) GetBooks(_ context.Context, tag string) ([]domain.Book, error) {
 	books := []domain.Book{
-		{ID: "book#abc123", Title: "Designing Data-Intensive Applications", Author: "Martin Kleppmann", ISBN: "978-1449373320", Status: "read", Type: "physical", Tags: []string{"engineering", "distributed-systems"}, CreatedAt: "2026-01-15T10:00:00Z"},
-		{ID: "book#def456", Title: "The Pragmatic Programmer", Author: "David Thomas, Andrew Hunt", ISBN: "978-0135957059", Status: "reading", Type: "digital", Tags: []string{"engineering", "career"}, CreatedAt: "2026-02-01T10:00:00Z"},
+		{ID: "book#abc123", Title: "Designing Data-Intensive Applications", Author: "Martin Kleppmann", ISBN: "978-1449373320", Status: "read", Type: "physical", Tags: []string{"engineering", "distributed-systems"}, DateFinished: "2025-12-20", CreatedAt: "2026-01-15T10:00:00Z"},
+		{ID: "book#def456", Title: "The Pragmatic Programmer", Author: "David Thomas, Andrew Hunt", ISBN: "978-0135957059", Status: "reading", Type: "digital", Tags: []string{"engineering", "career"}, DateStarted: "2026-01-15", CreatedAt: "2026-02-01T10:00:00Z"},
 	}
 	if tag == "" {
 		return books, nil

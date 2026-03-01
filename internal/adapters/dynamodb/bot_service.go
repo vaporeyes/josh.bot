@@ -676,7 +676,7 @@ func (s *BotService) DeleteLogEntry(ctx context.Context, id string) error {
 // allowedBookFields defines which book fields can be updated via PUT.
 var allowedBookFields = map[string]bool{
 	"title": true, "isbn": true, "author": true,
-	"status": true, "type": true, "date_read": true, "tags": true,
+	"status": true, "type": true, "tags": true,
 }
 
 // --- Book Operations ---
