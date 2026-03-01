@@ -677,6 +677,7 @@ func (s *BotService) DeleteLogEntry(ctx context.Context, id string) error {
 var allowedBookFields = map[string]bool{
 	"title": true, "isbn": true, "author": true,
 	"status": true, "type": true, "tags": true,
+	"date_started": true, "date_finished": true,
 }
 
 // --- Book Operations ---
