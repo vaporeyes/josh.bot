@@ -1893,6 +1893,58 @@ func TestSetIdempotencyRecord_Success(t *testing.T) {
 	}
 }
 
+// --- Book Tests ---
+
+func TestUpdateBook_Success(t *testing.T) {
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateBook(context.Background(), "abc123", map[string]any{"title": "New Title"})
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestUpdateBook_AllowedFields(t *testing.T) {
+	// Verify every field in allowedBookFields is actually accepted.
+	// This test catches merge regressions that silently drop entries.
+	expected := []string{"title", "isbn", "author", "status", "type", "tags", "date_started", "date_finished"}
+	mock := &mockDynamoDBClient{updateOutput: &dynamodb.UpdateItemOutput{}}
+	svc := NewBotService(mock, "josh-bot-data")
+	for _, field := range expected {
+		err := svc.UpdateBook(context.Background(), "abc123", map[string]any{field: "test"})
+		if err != nil {
+			t.Errorf("expected field %q to be allowed, got error: %v", field, err)
+		}
+	}
+}
+
+func TestUpdateBook_InvalidField(t *testing.T) {
+	mock := &mockDynamoDBClient{}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateBook(context.Background(), "abc123", map[string]any{"hacker_field": "nope"})
+	if err == nil {
+		t.Error("expected error for invalid field, got nil")
+	}
+}
+
+func TestUpdateBook_EmptyFields(t *testing.T) {
+	mock := &mockDynamoDBClient{}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateBook(context.Background(), "abc123", map[string]any{})
+	if err == nil {
+		t.Error("expected error for empty fields, got nil")
+	}
+}
+
+func TestUpdateBook_DynamoDBError(t *testing.T) {
+	mock := &mockDynamoDBClient{updateErr: context.DeadlineExceeded}
+	svc := NewBotService(mock, "josh-bot-data")
+	err := svc.UpdateBook(context.Background(), "abc123", map[string]any{"status": "read"})
+	if err == nil {
+		t.Error("expected error from DynamoDB failure, got nil")
+	}
+}
+
 func TestSetIdempotencyRecord_DynamoDBError(t *testing.T) {
 	mock := &mockDynamoDBClient{putErr: context.DeadlineExceeded}
 	svc := NewBotService(mock, "josh-bot-data")
