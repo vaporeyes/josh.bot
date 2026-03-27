@@ -83,6 +83,10 @@ func (m *mockDynamoDBClient) DeleteItem(ctx context.Context, params *dynamodb.De
 	return m.deleteOutput, m.deleteErr
 }
 
+func (m *mockDynamoDBClient) BatchWriteItem(ctx context.Context, params *dynamodb.BatchWriteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchWriteItemOutput, error) {
+	return &dynamodb.BatchWriteItemOutput{}, nil
+}
+
 // --- Status Tests ---
 
 func TestGetStatus_Success(t *testing.T) {

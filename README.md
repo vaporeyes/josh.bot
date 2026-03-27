@@ -68,7 +68,7 @@ graph LR
     APIGW --> Router
 
     Router -->|"GET/POST/PUT/DELETE"| DDB
-    Router -->|"GET /metrics"| DDB_Lifts
+    Router -->|"GET /metrics, /lifts/*\nPOST /lifts/import"| DDB_Lifts
     Router -->|"GET /mem/*"| DDB_Mem
     Router -->|"POST /diary"| GH
 
@@ -148,6 +148,9 @@ curl http://localhost:8080/v1/notes
 curl http://localhost:8080/v1/til
 curl http://localhost:8080/v1/log
 curl http://localhost:8080/v1/diary
+curl http://localhost:8080/v1/lifts/recent
+curl http://localhost:8080/v1/lifts/recent?limit=5
+curl "http://localhost:8080/v1/lifts/exercise/Squat%20(Barbell)"
 curl http://localhost:8080/v1/mem/observations
 curl http://localhost:8080/v1/mem/summaries
 curl http://localhost:8080/v1/mem/prompts
@@ -310,6 +313,85 @@ curl https://api.josh.bot/v1/metrics
     "by_type": { "decision": 45, "feature": 60, "bugfix": 25 },
     "by_project": { "josh.bot": 120, "other": 30 }
   }
+}
+```
+
+### Lifts (Workout Data)
+
+Query and import workout lift data from the `josh-bot-lifts` DynamoDB table. Data originates from Strong app CSV exports. Lift IDs are deterministic (date + exercise + set order) making re-imports idempotent.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/v1/lifts/recent` | Yes | Recent workouts grouped by session (optional `?limit=` , default 10) |
+| POST | `/v1/lifts/import` | Yes | Import a Strong-format CSV export |
+| GET | `/v1/lifts/exercise/{name}` | Yes | All sets for a specific exercise (URL-encoded name) |
+
+```bash
+# Get 10 most recent workouts
+curl -H "x-api-key: <key>" https://api.josh.bot/v1/lifts/recent
+
+# Get 5 most recent workouts
+curl -H "x-api-key: <key>" "https://api.josh.bot/v1/lifts/recent?limit=5"
+
+# Import a Strong app CSV export
+curl -X POST https://api.josh.bot/v1/lifts/import \
+  -H "x-api-key: <key>" -H "Content-Type: text/csv" \
+  --data-binary @~/Downloads/strong_workouts_latest.csv
+
+# Get all sets for a specific exercise
+curl -H "x-api-key: <key>" "https://api.josh.bot/v1/lifts/exercise/Squat%20(Barbell)"
+```
+
+**Recent workouts response shape:**
+
+```json
+{
+  "workouts": [
+    {
+      "date": "2026-03-25",
+      "name": "Day 4",
+      "duration": "1h 13m",
+      "exercises": [
+        {
+          "name": "Squat (Barbell)",
+          "sets": [
+            {"set_order": "1", "weight": 225, "reps": 5, "distance": 0, "seconds": 0},
+            {"set_order": "2", "weight": 225, "reps": 5, "distance": 0, "seconds": 0}
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Import response shape:**
+
+```json
+{
+  "sets_imported": 5899,
+  "workouts": 253,
+  "exercises": 89
+}
+```
+
+**Exercise history response shape:**
+
+```json
+{
+  "exercise": "Squat (Barbell)",
+  "sets": [
+    {
+      "id": "lift#20260325T100611#squat-barbell#1",
+      "date": "2026-03-25 10:06:11",
+      "workout_name": "Day 4",
+      "set_order": "1",
+      "weight": 225,
+      "reps": 5,
+      "distance": 0,
+      "seconds": 0
+    }
+  ]
 }
 ```
 

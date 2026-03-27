@@ -50,6 +50,10 @@ func main() {
 	metricsService := dynamodbadapter.NewMetricsService(client, liftsTableName, tableName, memService)
 	adapter := lambdaadapter.NewAdapter(service, metricsService, memService)
 
+	// Wire up lift service for /v1/lifts endpoints
+	liftService := dynamodbadapter.NewLiftService(client, liftsTableName)
+	adapter.SetLiftService(liftService)
+
 	// Wire up webhook service if secret is configured
 	webhookSecret := os.Getenv("WEBHOOK_SECRET")
 	webhookService := dynamodbadapter.NewWebhookService(client, tableName)

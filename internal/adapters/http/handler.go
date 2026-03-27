@@ -7,6 +7,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/jduncan/josh-bot/internal/domain"
@@ -32,10 +34,16 @@ type Adapter struct {
 	service        domain.BotService
 	metricsService domain.MetricsService
 	memService     domain.MemService
+	liftService    domain.LiftService
 }
 
 func NewAdapter(service domain.BotService, metricsService domain.MetricsService, memService domain.MemService) *Adapter {
 	return &Adapter{service: service, metricsService: metricsService, memService: memService}
+}
+
+// SetLiftService sets the lift service for the adapter.
+func (a *Adapter) SetLiftService(ls domain.LiftService) {
+	a.liftService = ls
 }
 
 // MetricsHandler handles GET /v1/metrics.
@@ -833,6 +841,78 @@ func (a *Adapter) DeleteMemoryHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeOK(w, http.StatusOK)
+}
+
+// LiftsRecentHandler handles GET /v1/lifts/recent.
+func (a *Adapter) LiftsRecentHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	limit := 10
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	workouts, err := a.liftService.GetRecentWorkouts(r.Context(), limit)
+	if err != nil {
+		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	resp := struct {
+		Workouts []domain.WorkoutResponse `json:"workouts"`
+	}{Workouts: workouts}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// LiftsImportHandler handles POST /v1/lifts/import.
+func (a *Adapter) LiftsImportHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	summary, err := a.liftService.ImportLifts(r.Context(), r.Body)
+	if err != nil {
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, summary)
+}
+
+// LiftsExerciseHandler handles GET /v1/lifts/exercise/{name}.
+func (a *Adapter) LiftsExerciseHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	name := strings.TrimPrefix(r.URL.Path, "/v1/lifts/exercise/")
+	if name == "" {
+		http.Error(w, `{"error":"exercise name required"}`, http.StatusBadRequest)
+		return
+	}
+	decoded, err := url.PathUnescape(name)
+	if err != nil {
+		decoded = name
+	}
+
+	lifts, err := a.liftService.GetLiftsByExercise(r.Context(), decoded)
+	if err != nil {
+		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	resp := struct {
+		Exercise string        `json:"exercise"`
+		Sets     []domain.Lift `json:"sets"`
+	}{Exercise: decoded, Sets: lifts}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // writeJSON encodes val as JSON and writes it to the response.

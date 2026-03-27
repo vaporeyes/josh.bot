@@ -50,6 +50,10 @@ func (m *mockMetricsClient) Query(ctx context.Context, params *dynamodb.QueryInp
 	return &dynamodb.QueryOutput{}, nil
 }
 
+func (m *mockMetricsClient) BatchWriteItem(ctx context.Context, params *dynamodb.BatchWriteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchWriteItemOutput, error) {
+	return &dynamodb.BatchWriteItemOutput{}, nil
+}
+
 func marshalLift(t *testing.T, l domain.Lift) map[string]types.AttributeValue {
 	t.Helper()
 	item, err := attributevalue.MarshalMap(l)

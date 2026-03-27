@@ -16,9 +16,11 @@ func main() {
 	service := mock.NewBotService()
 	metricsService := mock.NewMetricsService()
 	memService := mock.NewMemService()
+	liftService := mock.NewLiftService()
 
 	// Initialize the HTTP adapter
 	adapter := httpadapter.NewAdapter(service, metricsService, memService)
+	adapter.SetLiftService(liftService)
 
 	// Register the handlers
 	mux := http.NewServeMux()
@@ -32,6 +34,9 @@ func main() {
 	mux.HandleFunc("/v1/books/", adapter.BookHandler)
 	mux.HandleFunc("/v1/diary", adapter.DiaryEntriesHandler)
 	mux.HandleFunc("/v1/diary/", adapter.DiaryEntryHandler)
+	mux.HandleFunc("/v1/lifts/recent", adapter.LiftsRecentHandler)
+	mux.HandleFunc("/v1/lifts/import", adapter.LiftsImportHandler)
+	mux.HandleFunc("/v1/lifts/exercise/", adapter.LiftsExerciseHandler)
 	mux.HandleFunc("/v1/mem/observations", adapter.MemObservationsHandler)
 	mux.HandleFunc("/v1/mem/observations/", adapter.MemObservationHandler)
 	mux.HandleFunc("/v1/mem/summaries", adapter.MemSummariesHandler)

@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 )
@@ -300,6 +301,44 @@ func (de DiaryEntry) Validate() error {
 		return &ValidationError{Field: "body", Message: "cannot be empty"}
 	}
 	return nil
+}
+
+// WorkoutResponse represents a grouped workout session for the API response.
+type WorkoutResponse struct {
+	Date      string          `json:"date"`
+	Name      string          `json:"name"`
+	Duration  string          `json:"duration"`
+	Exercises []ExerciseGroup `json:"exercises"`
+}
+
+// ExerciseGroup represents a grouped exercise within a workout.
+type ExerciseGroup struct {
+	Name string      `json:"name"`
+	Sets []SetDetail `json:"sets"`
+}
+
+// SetDetail represents an individual set within an exercise group.
+type SetDetail struct {
+	SetOrder string  `json:"set_order"`
+	Weight   float64 `json:"weight"`
+	Reps     float64 `json:"reps"`
+	Distance float64 `json:"distance"`
+	Seconds  float64 `json:"seconds"`
+	RPE      float64 `json:"rpe,omitempty"`
+}
+
+// ImportSummary contains counts returned after a CSV import.
+type ImportSummary struct {
+	SetsImported int `json:"sets_imported"`
+	Workouts     int `json:"workouts"`
+	Exercises    int `json:"exercises"`
+}
+
+// LiftService defines operations for querying and importing lift data.
+type LiftService interface {
+	GetRecentWorkouts(ctx context.Context, limit int) ([]WorkoutResponse, error)
+	GetLiftsByExercise(ctx context.Context, exerciseName string) ([]Lift, error)
+	ImportLifts(ctx context.Context, csvBody io.Reader) (ImportSummary, error)
 }
 
 // BotService is the interface that defines the operations for the bot.

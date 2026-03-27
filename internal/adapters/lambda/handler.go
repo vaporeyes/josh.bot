@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,7 +40,13 @@ type Adapter struct {
 	diaryService     domain.DiaryService
 	webhookService   domain.WebhookService
 	webhookPublisher domain.WebhookPublisher
+	liftService      domain.LiftService
 	webhookSecret    string
+}
+
+// SetLiftService sets the lift service for the adapter.
+func (a *Adapter) SetLiftService(ls domain.LiftService) {
+	a.liftService = ls
 }
 
 // NewAdapter creates a new Lambda adapter for the given services.
@@ -185,6 +193,13 @@ func (a *Adapter) Router(ctx context.Context, req events.APIGatewayProxyRequest)
 	case strings.HasPrefix(req.Path, "/v1/memory/"):
 		id := strings.TrimPrefix(req.Path, "/v1/memory/")
 		resp, routeErr = a.handleMemory(ctx, req, id)
+	case req.Path == "/v1/lifts/recent":
+		resp, routeErr = a.handleLiftsRecent(ctx, req)
+	case req.Path == "/v1/lifts/import":
+		resp, routeErr = a.handleLiftsImport(ctx, req)
+	case strings.HasPrefix(req.Path, "/v1/lifts/exercise/"):
+		name := strings.TrimPrefix(req.Path, "/v1/lifts/exercise/")
+		resp, routeErr = a.handleLiftsExercise(ctx, req, name)
 	case req.Path == "/v1/webhooks":
 		resp, routeErr = a.handleWebhooks(ctx, req)
 	case strings.HasPrefix(req.Path, "/v1/webhooks/"):
@@ -971,6 +986,92 @@ func (a *Adapter) handleWebhookEvent(ctx context.Context, req events.APIGatewayP
 		return errorResponse(err)
 	}
 	body, err := json.Marshal(event)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	return jsonResponse(200, string(body)), nil
+}
+
+// handleLiftsRecent handles GET /v1/lifts/recent.
+func (a *Adapter) handleLiftsRecent(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if req.HTTPMethod != "GET" {
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+	if a.liftService == nil {
+		return jsonResponse(500, `{"error":"lift service not configured"}`), nil
+	}
+
+	limit := 10
+	if v := req.QueryStringParameters["limit"]; v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	workouts, err := a.liftService.GetRecentWorkouts(ctx, limit)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+
+	resp := struct {
+		Workouts []domain.WorkoutResponse `json:"workouts"`
+	}{Workouts: workouts}
+	body, err := json.Marshal(resp)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	return jsonResponse(200, string(body)), nil
+}
+
+// handleLiftsImport handles POST /v1/lifts/import.
+func (a *Adapter) handleLiftsImport(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if req.HTTPMethod != "POST" {
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+	if a.liftService == nil {
+		return jsonResponse(500, `{"error":"lift service not configured"}`), nil
+	}
+	if req.Body == "" {
+		return jsonResponse(400, `{"error":"empty request body"}`), nil
+	}
+
+	summary, err := a.liftService.ImportLifts(ctx, strings.NewReader(req.Body))
+	if err != nil {
+		// CSV parse errors are client errors
+		return jsonResponse(400, `{"error":"`+err.Error()+`"}`), nil
+	}
+
+	body, err := json.Marshal(summary)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+	return jsonResponse(200, string(body)), nil
+}
+
+// handleLiftsExercise handles GET /v1/lifts/exercise/{name}.
+func (a *Adapter) handleLiftsExercise(ctx context.Context, req events.APIGatewayProxyRequest, name string) (events.APIGatewayProxyResponse, error) {
+	if req.HTTPMethod != "GET" {
+		return jsonResponse(405, `{"error":"method not allowed"}`), nil
+	}
+	if a.liftService == nil {
+		return jsonResponse(500, `{"error":"lift service not configured"}`), nil
+	}
+
+	decoded, err := url.PathUnescape(name)
+	if err != nil {
+		decoded = name
+	}
+
+	lifts, err := a.liftService.GetLiftsByExercise(ctx, decoded)
+	if err != nil {
+		return jsonResponse(500, `{"error":"internal server error"}`), err
+	}
+
+	resp := struct {
+		Exercise string        `json:"exercise"`
+		Sets     []domain.Lift `json:"sets"`
+	}{Exercise: decoded, Sets: lifts}
+	body, err := json.Marshal(resp)
 	if err != nil {
 		return jsonResponse(500, `{"error":"internal server error"}`), err
 	}
