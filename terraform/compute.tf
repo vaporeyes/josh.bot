@@ -11,6 +11,7 @@ resource "aws_lambda_function" "josh_bot_api" {
   runtime          = "provided.al2023"
   architectures    = ["arm64"] # Cost-effective and fast
   timeout          = 15        # Metrics endpoint scans ~5K lifts table
+  memory_size      = 256       # Extra headroom for table scans
 
   environment {
     variables = {
