@@ -578,12 +578,15 @@ func (s *BotService) GetLogEntries(ctx context.Context, tag string) ([]domain.Lo
 		exprValues[":tag"] = &types.AttributeValueMemberS{Value: tag}
 	}
 
+	// Return newest entries first (descending by created_at sort key).
+	descending := false
 	items, err := s.queryAllPages(ctx, &dynamodb.QueryInput{
 		TableName:                 &s.tableName,
 		IndexName:                 &indexName,
 		KeyConditionExpression:    &keyExpr,
 		FilterExpression:          &filter,
 		ExpressionAttributeValues: exprValues,
+		ScanIndexForward:          &descending,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("dynamodb Query: %w", err)
