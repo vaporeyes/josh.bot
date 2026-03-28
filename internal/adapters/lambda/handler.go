@@ -78,7 +78,7 @@ func isPublicRoute(method, path string) bool {
 	if method != "GET" {
 		return false
 	}
-	return path == "/v1/status" || path == "/v1/metrics"
+	return path == "/v1/status" || path == "/v1/metrics" || strings.HasPrefix(path, "/v1/lifts/")
 }
 
 // isWebhookPost returns true for POST /v1/webhooks which uses HMAC auth instead of API key.
